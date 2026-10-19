@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { api, APIError } from '../src/api.ts';
+import { api, APIError, downloadCSV } from '../src/api.ts';
 
 test('a stalled CSRF request times out without submitting a mutation', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -55,4 +55,25 @@ test('money transport preserves int64, identity, key and clears the deadline aft
   assert.equal(sent.headers['Idempotency-Key'], 'key');
   t.mock.timers.tick(20_000);
   assert.equal(sent.signal.aborted, false);
+});
+
+
+test('CSV error responses never become downloads', async t => {
+ t.mock.method(globalThis,'fetch',()=>Promise.resolve(globalThis.Response.json({error:{code:'EXPORT_TOO_LARGE',message:'Уменьшите период'}},{status:422})));
+ await assert.rejects(downloadCSV('cash',new globalThis.URLSearchParams()),error=>error instanceof APIError&&error.code==='EXPORT_TOO_LARGE');
+});
+
+test('CSV downloader rejects an unexpected successful HTML response', async t => {
+ t.mock.method(globalThis,'fetch',()=>Promise.resolve(new globalThis.Response('<html/>',{headers:{'Content-Type':'text/html'}})));
+ await assert.rejects(downloadCSV('shifts',new globalThis.URLSearchParams()),error=>error instanceof APIError&&error.code==='INVALID_RESPONSE');
+});
+
+test('CSV download deadline covers stalled response body', async t => {
+ t.mock.timers.enable({apis:['setTimeout']});
+ let reading;
+ const started=new Promise(resolve=>{reading=resolve;});
+ t.mock.method(globalThis,'fetch',(_url,options)=>Promise.resolve({ok:true,headers:new globalThis.Headers({'content-type':'text/csv'}),blob:()=>{reading();return new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new Error('aborted'))));}}));
+ const pending=downloadCSV('cash',new globalThis.URLSearchParams());
+ const rejected=assert.rejects(pending,error=>error instanceof APIError&&error.code==='REQUEST_TIMEOUT');
+ await started;t.mock.timers.tick(20_000);await rejected;
 });

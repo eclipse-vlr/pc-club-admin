@@ -6,6 +6,7 @@ import type { Identity, User } from './api';
 import './style.css';
 import { ChecklistPanel } from './ChecklistPanel';
 import { HistoryPanel } from './HistoryPanel';
+import { ExportPanel } from './ExportPanel';
 import { AuditPanel } from './AuditPanel';
 import { ManagerDashboard } from './ManagerDashboard';
 
@@ -86,6 +87,7 @@ function App() {
         <button disabled={busy} onClick={() => void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); })}>Выйти / сменить сотрудника</button>
       </section>
       {identity.user.roles.includes('manager')&&<ManagerDashboard key={'dashboard:'+identity.user.id}/>}
+      {identity.user.roles.includes('manager')&&<ExportPanel key={'exports:'+identity.user.id} users={users}/>}
       {identity.user.roles.includes('manager')&&<AuditPanel key={'audit:'+identity.user.id} users={users} timezone={clubTimezone}/>}
       <HistoryPanel key={'history:'+identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} timezone={clubTimezone}/>
       <ChecklistPanel key={identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} excelSyncEnabled={excelSyncEnabled} onSessionEnd={refresh} />

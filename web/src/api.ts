@@ -36,3 +36,26 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, actor
     clearTimeout(deadline);
   }
 }
+
+// Keep one deadline through reading the file; errors must not become downloads.
+export async function downloadCSV(kind:'shifts'|'cash',params:URLSearchParams):Promise<void> {
+ const controller=new AbortController();
+ const deadline=setTimeout(()=>controller.abort(),20_000);
+ try {
+  const response=await fetch('/api/v1/exports/'+kind+'.csv?'+params.toString(),{cache:'no-store',signal:controller.signal});
+  if(!response.ok){
+   const result=await response.json() as {error?:{code?:string;message?:string}};
+   throw new APIError(result.error?.code??'REQUEST_FAILED',result.error?.message??'Не удалось сформировать выгрузку. Уменьшите период и повторите запрос.');
+  }
+  if(!response.headers.get('content-type')?.startsWith('text/csv'))throw new APIError('INVALID_RESPONSE','Сервер вернул неожиданный формат файла.');
+  const blob=await response.blob();
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');link.href=url;link.download=kind+'.csv';
+  document.body.appendChild(link);link.click();link.remove();
+  // Revoke after the browser has begun consuming the object URL.
+  setTimeout(()=>URL.revokeObjectURL(url),60_000);
+ }catch(cause){
+  if(controller.signal.aborted)throw new APIError('REQUEST_TIMEOUT','Выгрузка не получена вовремя. Уменьшите период и повторите запрос.');
+  throw cause;
+ }finally{clearTimeout(deadline);}
+}
