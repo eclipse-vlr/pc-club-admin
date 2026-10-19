@@ -42,6 +42,8 @@ jobs:
       - run: go test ./...
       - run: go test -race ./...
       - run: go test -race -tags=integration ./internal/storage/postgres ./internal/httpapi -count=1
+      - name: Isolated PostgreSQL backup and restore drill
+        run: node scripts/test-backup.mjs
       - run: go run ./cmd/migrate up
       - run: go build ./cmd/api ./cmd/migrate ./cmd/admin
       - run: npm ci
