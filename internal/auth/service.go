@@ -554,7 +554,7 @@ func (s *Service) RevokeDevice(ctx context.Context, r Request, deviceID string) 
 	})
 }
 func (s *Service) Reauth(ctx context.Context, r Request, secret, action, target string, revision int64) (string, error) {
-	if !ValidID(target) || revision < 1 || (action != "prepare_handover" && action != "accept_handover" && action != "collection" && action != "reverse_collection") {
+	if !ValidID(target) || revision < 1 || (action != "prepare_handover" && action != "accept_handover" && action != "collection" && action != "reverse_collection" && action != "activate_first_shift") {
 		return "", Fail("INVALID_INPUT", 400)
 	}
 	var token string

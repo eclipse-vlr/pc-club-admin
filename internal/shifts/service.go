@@ -40,7 +40,14 @@ func (s *Service) within(ctx context.Context, r auth.Request, mutation bool, fn 
 		if failure != nil {
 			reason = failure.Code
 		}
-		if e := s.repo.Within(ctx, func(tx Tx) error { return event(tx, r, actor, "shift_request_rejected", "", false, reason, nil) }); e != nil {
+		if e := s.repo.Within(ctx, func(tx Tx) error {
+			return event(tx, r, actor, "shift_request_rejected", "", false, reason, func() map[string]any {
+				if failure != nil {
+					return failure.Details
+				}
+				return nil
+			}())
+		}); e != nil {
 			return e
 		}
 	}
@@ -313,10 +320,24 @@ func (s *Service) Readiness(ctx context.Context, r auth.Request, shiftID string)
 	blockers := append([]checklists.Blocker{}, acceptance.Blockers...)
 	if shift.Status != "opening" {
 		blockers = append(blockers, closing.Blockers...)
+		if shift.Cash != nil {
+			for _, b := range shift.Cash.Summary.Blockers {
+				blockers = append(blockers, checklists.Blocker{Code: b.Code, Message: b.Message})
+			}
+		}
 	}
-	blockers = append(blockers, checklists.Blocker{Code: "CASH_MODULE_NOT_IMPLEMENTED", Message: "Окончательный приём и передача недоступны до кассовой проверки"})
+	canActivate := shift.Status == "opening" && len(acceptance.Blockers) == 0 && shift.InitialCash != nil && !s.production
+	if shift.Status == "opening" {
+		blockers = append(blockers, checklists.Blocker{Code: "OPENING_COUNT_REQUIRED", Message: "Для окончательного приёма введите собственный пересчёт и свежий PIN"})
+	} else {
+		blockers = append(blockers, checklists.Blocker{Code: "HANDOVER_NOT_IMPLEMENTED", Message: "Передача следующему сотруднику появится на этапе 5"})
+	}
 	if s.production {
 		blockers = append(blockers, checklists.Blocker{Code: "CASH_POLICY_UNVERIFIED", Message: "Кассовая политика не подтверждена для production"})
 	}
-	return Readiness{Version: shift.Version, Acceptance: acceptance, Closing: closing, Blockers: blockers}, nil
+	result := Readiness{Version: shift.Version, Acceptance: acceptance, Closing: closing, CanActivate: canActivate, Blockers: blockers}
+	if shift.Cash != nil {
+		result.Cash = &shift.Cash.Summary
+	}
+	return result, nil
 }

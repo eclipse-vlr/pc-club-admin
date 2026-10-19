@@ -9,12 +9,13 @@ import (
 var ErrMissing = errors.New("record missing")
 
 type Failure struct {
-	Code   string
-	Status int
+	Code    string
+	Status  int
+	Details map[string]any
 }
 
 func (e *Failure) Error() string         { return e.Code }
-func Fail(code string, status int) error { return &Failure{code, status} }
+func Fail(code string, status int) error { return &Failure{Code: code, Status: status} }
 
 type User struct {
 	ID           string   `json:"id"`
