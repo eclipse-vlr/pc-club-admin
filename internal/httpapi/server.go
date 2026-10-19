@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"pc-club-admin/internal/auth"
 	"pc-club-admin/internal/config"
 )
 
@@ -24,8 +25,11 @@ type status struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-func New(c config.Config, check Check, logger *slog.Logger) http.Handler {
+func New(c config.Config, check Check, logger *slog.Logger, services ...*auth.Service) http.Handler {
 	mux := http.NewServeMux()
+	if len(services) > 0 && services[0] != nil {
+		authRoutes(mux, c, services[0])
+	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, status{Status: "ok"}) })
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 		if c.ProductionBlocked() {
@@ -48,7 +52,7 @@ func New(c config.Config, check Check, logger *slog.Logger) http.Handler {
 			Timezone          string `json:"timezone"`
 			CashPolicy        string `json:"cash_policy_status"`
 			OperationsEnabled bool   `json:"operations_enabled"`
-		}{"PC Club Admin", "foundation", c.Environment, c.Timezone, c.CashPolicyStatus, false})
+		}{"PC Club Admin", "auth", c.Environment, c.Timezone, c.CashPolicyStatus, false})
 	})
 	// Reserved namespace: unknown API routes must never return the frontend shell.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

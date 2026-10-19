@@ -1,6 +1,6 @@
 # PC Club Admin
 
-Веб-приложение одного компьютерного клуба. Сейчас выполнен инфраструктурный каркас этапов 0–1; для реального учёта кассы и передачи смен не готово. Основное ТЗ: [docs/PC_Club_Codex_Technical_Spec.md](docs/PC_Club_Codex_Technical_Spec.md).
+Веб-приложение одного компьютерного клуба. Сейчас выполнены каркас этапов 0–1 и контур входа этапа 2; для реального учёта кассы и передачи смен не готово. Основное ТЗ: [docs/PC_Club_Codex_Technical_Spec.md](docs/PC_Club_Codex_Technical_Spec.md).
 
 Go 1.25.3, PostgreSQL 17.6, React 19.2, TypeScript 5.9, Vite 7; Node.js 24.19 и npm 11.9, Docker Engine/Desktop + Compose v2. На Windows включите Linux containers. Все команды выполняются из корня pc-club-admin, если не указано иное.
 
@@ -8,9 +8,9 @@ Go 1.25.3, PostgreSQL 17.6, React 19.2, TypeScript 5.9, Vite 7; Node.js 24.19 и
 
 Один Go backend отдаёт JSON API и собранный frontend с одного origin; PostgreSQL хранит данные. В dev Vite проксирует /api, /healthz и /readyz на Go. Config валидируется при старте. Миграции запускаются отдельной CLI; приложение само их не применяет и отказывается стартовать с отсутствующей/неподходящей схемой.
 
-Реализованы `/healthz`, `/readyz`, `/api/v1/status`, статическая оболочка UI и схема настроек клуба. Авторизации, смен, денег и персональных данных пока нет. Публичный status сообщает `operations_enabled=false`, а готовность самого MVP не декларируется.
+Реализованы `/healthz`, `/readyz`, `/api/v1/status`, вход, сессии, роли, доверенные браузеры и аудит. Смен и денежных операций пока нет. Публичный status сообщает `operations_enabled=false`, а готовность самого MVP не декларируется.
 
-`CASH_POLICY_STATUS=unverified` — единственное разрешённое значение этой версии. `APP_ENV=production` оставляет только диагностику и оболочку: readiness отвечает 503 `CASH_POLICY_UNVERIFIED`. Установить `verified` флагом нельзя: сначала нужны реальная проверка, согласованная версия политики, ADR, миграция и тесты. Предварительная арифметика будет изолирована на этапе 4 только в test-mode.
+`CASH_POLICY_STATUS=unverified` — единственное разрешённое значение этой версии. `APP_ENV=production` блокирует работу со сменами и кассой, сохраняя контур настройки входа: readiness отвечает 503 `CASH_POLICY_UNVERIFIED`. Установить `verified` флагом нельзя: сначала нужны реальная проверка, согласованная версия политики, ADR, миграция и тесты. Предварительная арифметика будет изолирована на этапе 4 только в test-mode.
 
 Проектные допущения и обязательные ограничения: [docs/decisions](docs/decisions). Часовой пояс `Europe/Moscow` требует подтверждения владельцем. Миграция сохраняет его в singleton клуба; повторный запуск не меняет настройки. Матрица реализации: [docs/requirements.md](docs/requirements.md).
 
@@ -20,6 +20,7 @@ Go 1.25.3, PostgreSQL 17.6, React 19.2, TypeScript 5.9, Vite 7; Node.js 24.19 и
 
 ```powershell
 Copy-Item .env.example .env
+node ./scripts/init-secrets.mjs
 . ./scripts/load-env.ps1
 docker compose up -d --wait db
 go mod download
@@ -39,7 +40,7 @@ Invoke-RestMethod http://127.0.0.1:8080/readyz
 Invoke-RestMethod http://127.0.0.1:8080/api/v1/status
 ```
 
-Для frontend-разработки при работающем API:
+Для frontend-разработки укажите в окружении **API-процесса** `APP_ORIGIN=http://127.0.0.1:5173` и перезапустите API (PowerShell: `$env:APP_ORIGIN = "http://127.0.0.1:5173"`). Иначе защита Origin намеренно отклонит вход с Vite. При возврате к собранному UI верните `http://127.0.0.1:8080`. Затем:
 
 ```powershell
 Set-Location web
@@ -52,6 +53,7 @@ Vite: http://127.0.0.1:5173. API слушает loopback; не публикуй�
 
 ```bash
 cp .env.example .env
+node ./scripts/init-secrets.mjs
 set -a
 . ./.env
 set +a
@@ -67,7 +69,7 @@ go run ./cmd/api
 
 ## Миграции и диагностика
 
-`go run ./cmd/migrate up` выполняет единственную миграцию этого этапа транзакционно под advisory lock; повтор безопасен. В БД записывается SHA-256 SQL. Изменение уже применённой миграции, неизвестная версия или несовпадение timezone отклоняются. Новые изменения схемы в следующих этапах требуют нового SQL и расширения manifest, не правки применённого файла.
+`go run ./cmd/migrate up` выполняет упорядоченные миграции транзакционно под advisory lock; повтор безопасен. В БД записывается SHA-256 SQL. Изменение уже применённой миграции, неизвестная версия или несовпадение timezone отклоняются. Новые изменения схемы в следующих этапах требуют нового SQL и расширения manifest, не правки применённого файла.
 
 `/healthz` проверяет только жизнь процесса; `/readyz` в test-mode проверяет доступность БД, manifest/checksum и настройки клуба с тайм-аутом 2 секунды. Ответ не раскрывает URL БД, SQL или stacktrace. Если БД недоступна на старте, API завершится с ненулевым кодом; если БД потеряна после старта, readiness станет 503. При production неподтверждённая политика приоритетно возвращает `CASH_POLICY_UNVERIFIED`.
 
@@ -79,7 +81,7 @@ SQL up/down находятся в `migrations/`, но автоматическо
 go vet ./...
 go test ./...
 go test -race ./...
-go build ./cmd/api ./cmd/migrate
+go build ./cmd/api ./cmd/migrate ./cmd/admin
 Push-Location web
 npm run typecheck
 npm run lint
@@ -95,7 +97,7 @@ Integration suite требует отдельную БД с именем, зак
 ```powershell
 docker compose exec -T db createdb -U pcclub pcclub_test
 $env:TEST_DATABASE_URL = "postgres://pcclub:local-development-only@localhost:5432/pcclub_test?sslmode=disable"
-go test -race -tags=integration ./internal/storage/postgres -count=1
+go test -race -tags=integration ./internal/storage/postgres ./internal/httpapi -count=1
 ```
 
 Linux:
@@ -104,21 +106,33 @@ Linux:
 go vet ./...
 go test ./...
 go test -race ./...
-go build ./cmd/api ./cmd/migrate
+go build ./cmd/api ./cmd/migrate ./cmd/admin
 docker compose exec -T db createdb -U pcclub pcclub_test
-TEST_DATABASE_URL='postgres://pcclub:local-development-only@localhost:5432/pcclub_test?sslmode=disable' go test -race -tags=integration ./internal/storage/postgres -count=1
+TEST_DATABASE_URL='postgres://pcclub:local-development-only@localhost:5432/pcclub_test?sslmode=disable' go test -race -tags=integration ./internal/storage/postgres ./internal/httpapi -count=1
 npm --prefix web run typecheck
 npm --prefix web run lint
 npm --prefix web run build
 docker compose config --quiet
 ```
 
-Если тестовая БД уже создана, пропустите createdb. CI проверяет format/vet/unit/race/integration, сборку frontend и HTTP smoke после миграции. Бизнес E2E пока отсутствуют: вход/передача ещё не реализованы; они добавляются на этапах 2–6. Текущие результаты фактически выполненных проверок: [docs/verification.md](docs/verification.md).
+Если тестовая БД уже создана, пропустите createdb. CI проверяет format/vet/unit/race/integration, сборку frontend и HTTP smoke после миграции. Браузерные E2E пока отсутствуют; контур входа проверен HTTP integration и live smoke. Полный сценарий передачи появится на этапах 5–6. Текущие результаты фактически выполненных проверок: [docs/verification.md](docs/verification.md).
 
 ## Следующие этапы и эксплуатация
 
-Следующий этап 2: пользователи и роли, PIN/manager password, enrollment браузера, сессии, CSRF/Origin, аудит и устойчивые блокировки попыток входа. Bootstrap управляющего и регистрация ПК пока не реализованы: готовых команд для них нет. Не создавайте публичную регистрацию или общий seed-пароль.
+Этап 2 реализован: Argon2id, PIN 6 цифр с отдельным PIN_PEPPER, роли, пароль управляющего, сессии и доверенные браузеры, Origin/CSRF, аудит, блокировки 5 ошибок / 5 минут в БД. Idle TTL 15 минут, абсолютный TTL 14 часов. Только пользовательские действия отправляют `/auth/activity`; GET/polling не продлевает сессию. При смене пользователя старая сессия отзывается. Подробная первичная настройка — [docs/auth-setup.md](docs/auth-setup.md).
 
+После миграции создайте первого управляющего локально. Пароль вводится скрыто дважды и не попадает в аргументы команды, seed или Git:
+
+```powershell
+. ./scripts/load-env.ps1
+go run ./cmd/admin bootstrap-manager --login manager --name "Управляющий"
+```
+
+Команда та же в Linux после загрузки `.env`. Bootstrap одноразовый: повтор при наличии пользователей запрещён. Для non-interactive secret pipe предусмотрен `--password-stdin`; не передавайте пароль литералом в shell history. При потере всех паролей административное восстановление — отдельный ещё не реализованный регламент, не публичный endpoint.
+
+В UI войдите управляющим, добавьте администраторов с личными PIN, создайте одноразовый код регистрации после повторного пароля. В клубном браузере выйдите, откройте «Зарегистрировать браузер клуба», введите код и название, затем войдите по личному PIN. Управляющий может входить из дома без device cookie. Полное управление ролями/сбросом PIN из UI запланировано на этапе 7; API создания, деактивации и сброса PIN уже проверяет роль/version и отзывает сессии.
+
+Следующий этап 3: версионированный seed 31 пункта, снимки чек-листа, черновики и проверка ответов на сервере, первая opening-смена. Кассовый ввод/активация с переносом денег остаются закрыты до последующих этапов; создаваемый чек-лист не должен давать возможность обойти проверку кассы.
 Далее по ТЗ: 31 пункт чек-листа и первая opening-смена; изолированный тестовый расчёт кассы; атомарная передача с двумя личными входами, блокировками, авторством, аудитом и идемпотентностью. Менеджерского обхода кассы/чек-листа не будет. Поломка требует фиксации, а не обязательного ремонта. API LANGAME и автоматизация его браузера отсутствуют и не планируются в MVP.
 
 Контейнерная поставка API/frontend, HTTPS reverse proxy, команды backup/restore и проверка восстановления — этап 8. Нынешний Compose запускает только dev PostgreSQL и не является production-конфигурацией. До пилота нужны ежедневная зашифрованная копия вне сервера, согласованный срок хранения, измеренное восстановление на отдельной БД и условия раздела 16 ТЗ. Непроверенные инструкции восстановления здесь не выдаются за готовую поставку.

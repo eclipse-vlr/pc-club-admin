@@ -18,15 +18,17 @@ jobs:
           --health-interval 3s --health-timeout 3s --health-retries 20
     env:
       APP_ENV: test
+      PIN_PEPPER: ci-synthetic-only-pepper-at-least-32-characters
+      APP_ORIGIN: http://127.0.0.1:8080
       DATABASE_URL: postgres://pcclub:ci-synthetic-only@localhost:5432/pcclub_test?sslmode=disable
       TEST_DATABASE_URL: postgres://pcclub:ci-synthetic-only@localhost:5432/pcclub_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
         with:
           go-version: '1.25.3'
           cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24.19.0'
           cache: npm
@@ -36,9 +38,9 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
       - run: go test -race ./...
-      - run: go test -race -tags=integration ./internal/storage/postgres -count=1
+      - run: go test -race -tags=integration ./internal/storage/postgres ./internal/httpapi -count=1
       - run: go run ./cmd/migrate up
-      - run: go build ./cmd/api ./cmd/migrate
+      - run: go build ./cmd/api ./cmd/migrate ./cmd/admin
       - run: npm ci
         working-directory: web
       - run: npm run lint
