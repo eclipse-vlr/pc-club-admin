@@ -63,7 +63,18 @@ try{
  await page.getByRole('alert').waitFor();
  await page.unroute('**/api/v1/handovers/*/accept');
  await page.reload();
- await page.getByText('Активная смена',{exact:false}).waitFor();
+ await page.getByRole('region',{name:'Текущая смена',exact:true}).getByText('Активная смена',{exact:false}).waitFor();
+ // The recipient can inspect the closed outgoing shift and its frozen transfer.
+ await page.locator('summary').filter({hasText:'История смен'}).click();
+ await page.locator('select[name="status"]').selectOption('closed');
+ await page.getByRole('button',{name:'Показать историю',exact:true}).click();
+ await page.getByRole('button',{name:'Просмотреть смену 2026-10-19 · Сдающий E2E · День',exact:true}).click();
+ const detail=page.getByRole('region',{name:'Детали смены',exact:true});
+ await detail.getByRole('button',{name:'Просмотреть передачу · редакция 1',exact:true}).click();
+ const snapshot=page.getByRole('region',{name:'Снимок передачи',exact:true});
+ await snapshot.getByRole('heading',{name:'Снимок передачи · Принята · редакция 1',exact:true}).waitFor();
+ await snapshot.getByText('Поломка зафиксирована, ремонт не завершён',{exact:false}).waitFor();
+ assert.equal(await detail.locator('input,select,textarea').count(),0,'history is read-only');
  assert.equal(scriptErrors.length,0,'no browser script errors');
  await context.close();
 }finally{await browser.close();}

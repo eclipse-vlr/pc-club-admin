@@ -79,7 +79,7 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
     } catch (cause) { setError(message(cause)); }
     finally { setBusy(false); }
   }
-  return <section>
+  return <section aria-label="Текущая смена">
     <h2>Смена и чек-лист</h2>
     <p>Черновик не назначает ответственного. В тестовом режиме первый приём требует чек-листа, собственного пересчёта и свежего PIN. Для передачи оба сотрудника лично входят по PIN на одном браузере.</p>
     <button disabled={busy} onClick={() => void load().catch(() => {})}>Перечитать сохранённые данные</button>

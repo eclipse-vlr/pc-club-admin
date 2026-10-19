@@ -6,7 +6,7 @@ import { formatRubles, parseRubles, rublesInput, stringifyExact } from './money'
 
 type Movement = { id: string; kind: string; amount_kopecks: string; reversal_of: string | null; reason: string; recipient: string; occurred_at: string };
 export type CashView = {
-  session: { version: number; opening_cash_kopecks: string; langame_cash_amount_kopecks: string | null; extra_cash_refunds_kopecks: string | null; extra_cash_expenses_kopecks: string | null; counted_closing_kopecks: string | null; movements: Movement[] };
+  session: { version: number; opening_cash_kopecks: string;counted_opening_kopecks:string|null;opening_confirmed_at:string|null; langame_cash_amount_kopecks: string | null; extra_cash_refunds_kopecks: string | null; extra_cash_expenses_kopecks: string | null; counted_closing_kopecks: string | null; movements: Movement[] };
   summary: { expected_closing_kopecks: string | null; difference_kopecks: string | null; collection_total_kopecks: string | null; policy_version: string; verified: boolean; blockers: { code: string; message: string }[] };
 };
 type Props = { identity: Identity; shift: { id: string; owner_id: string; status: string; version: number; cash?: CashView | null }; readyToActivate: boolean; refresh: () => Promise<void> };
