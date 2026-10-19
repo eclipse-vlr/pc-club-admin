@@ -74,6 +74,13 @@ func TestManagerAuditMetadataPagination(t *testing.T) {
 	for _, query := range []string{"?cursor=01", "?actor_id=bad", "?from=bad", "?limit=0", "?limit=1&limit=2", "?unknown=1"} {
 		remote.call("GET", endpoint+query, nil, 400)
 	}
+
+	_, err = pool.Exec(ctx, `INSERT INTO audit_events(action,entity_id,request_id,success,details) VALUES('cash_saved','synthetic-cash','request-safe-projection',true,'{"before":{"langame_cash_amount_kopecks":null},"after":{"langame_cash_amount_kopecks":9007199254740993,"pin_hash":"must-not-leak","movements":[{"token":"must-not-leak"}]}}')`)
+	check(err)
+	safe := read(endpoint + "?action=cash_saved")
+	if len(safe.Items) != 1 || len(safe.Items[0].Changes) != 1 || safe.Items[0].Changes[0].Before != nil || *safe.Items[0].Changes[0].After != "9007199254740993" {
+		t.Fatalf("bad safe projection: %+v", safe)
+	}
 	// Role revocation is checked server-side even for an existing valid session.
 	_, err = pool.Exec(ctx, `UPDATE user_roles SET role='admin' WHERE user_id=$1 AND role='manager'`, login.Identity.User.ID)
 	check(err)

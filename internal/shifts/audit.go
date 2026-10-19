@@ -2,6 +2,7 @@ package shifts
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -23,16 +24,18 @@ type AuditFilter struct {
 }
 
 type AuditRecord struct {
-	ID        string    `json:"id"`
-	ActorID   *string   `json:"actor_id"`
-	ActorName *string   `json:"actor_name"`
-	DeviceID  *string   `json:"device_id"`
-	Action    string    `json:"action"`
-	EntityID  string    `json:"entity_id"`
-	RequestID string    `json:"request_id"`
-	Success   bool      `json:"success"`
-	Reason    string    `json:"reason"`
-	CreatedAt time.Time `json:"created_at"`
+	RawDetails json.RawMessage `json:"-"`
+	Changes    []AuditChange   `json:"changes"`
+	ID         string          `json:"id"`
+	ActorID    *string         `json:"actor_id"`
+	ActorName  *string         `json:"actor_name"`
+	DeviceID   *string         `json:"device_id"`
+	Action     string          `json:"action"`
+	EntityID   string          `json:"entity_id"`
+	RequestID  string          `json:"request_id"`
+	Success    bool            `json:"success"`
+	Reason     string          `json:"reason"`
+	CreatedAt  time.Time       `json:"created_at"`
 }
 
 type AuditPage struct {
@@ -81,6 +84,10 @@ func (s *Service) Audit(ctx context.Context, r auth.Request, f AuditFilter) (Aud
 		if len(rows) > f.Limit {
 			result.NextCursor = rows[f.Limit-1].ID
 			rows = rows[:f.Limit]
+		}
+		for i := range rows {
+			rows[i].Changes = ProjectAuditChanges(rows[i].Action, rows[i].RawDetails)
+			rows[i].RawDetails = nil
 		}
 		result.Items = rows
 		return nil

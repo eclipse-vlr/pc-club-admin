@@ -7721,7 +7721,8 @@
           "request_id",
           "reason",
           "created_at",
-          "success"
+          "success",
+          "changes"
         ],
         "properties": {
           "id": {
@@ -7758,6 +7759,30 @@
           },
           "success": {
             "type": "boolean"
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "before",
+                "after"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "before": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "after": {
+                  "type": "string",
+                  "nullable": true
+                }
+              }
+            }
           }
         }
       },

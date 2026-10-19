@@ -7,6 +7,7 @@ import './style.css';
 import { ChecklistPanel } from './ChecklistPanel';
 import { HistoryPanel } from './HistoryPanel';
 import { ExportPanel } from './ExportPanel';
+import { EmployeePanel } from './EmployeePanel';
 import { AuditPanel } from './AuditPanel';
 import { ManagerDashboard } from './ManagerDashboard';
 
@@ -21,6 +22,7 @@ function App() {
   const [message, setMessage] = useState('');
   const [mode, setMode] = useState<'admin' | 'manager'>('admin');
   const [users, setUsers] = useState<User[]>([]);
+ const [newRole,setNewRole]=useState('admin');
   const [enrollment, setEnrollment] = useState('');
   const [devices, setDevices] = useState<{ id: string; label: string; expires_at: string; revoked: boolean }[]>([]);
 
@@ -94,14 +96,16 @@ function App() {
       {identity.user.roles.includes('manager') && <>
         <section><h2>Сотрудники</h2><ul>{users.map(user => <li key={user.id}>{user.display_name} · {user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')} · {user.active ? 'активен' : 'отключён'}</li>)}</ul>
           <form onSubmit={event => submit(event, async data => {
-            await api('/users', 'POST', { display_name: text(data, 'name'), roles: ['admin'], pin: text(data, 'pin') }, actor);
-            setMessage('Сотрудник создан. PIN не выводится и не сохраняется в браузере.');
+            const role=text(data,'role');
+            await api('/users', 'POST', { display_name: text(data, 'name'), roles: role==='both'?['admin','manager']:[role], ...(role!=='manager'?{pin:text(data,'pin')}:{}), ...(role!=='admin'?{manager_login:text(data,'login'),password:text(data,'password')}:{}) }, actor);
+            setMessage('Сотрудник создан. Учётные данные не выводятся и не сохраняются в браузере.');
           })}>
-            <h3>Добавить администратора</h3><label>Имя<input name="name" required maxLength={100} autoComplete="off" /></label>
-            <label>Личный PIN · 6 цифр<input name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} required autoComplete="new-password" /></label>
+            <h3>Добавить сотрудника</h3><label>Роль нового сотрудника<select name="role" aria-label="Роль нового сотрудника" value={newRole} onChange={event=>setNewRole(event.target.value)}><option value="admin">Администратор</option><option value="manager">Управляющий</option><option value="both">Администратор и управляющий</option></select></label><label>Имя<input name="name" required maxLength={100} autoComplete="off" /></label>
+            <>{newRole!=='manager'&&<label>Личный PIN · 6 цифр<input name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} required autoComplete="new-password" /></label>}{newRole!=='admin'&&<><label>Логин нового управляющего<input name="login" required minLength={3} maxLength={100} autoComplete="off"/></label><label>Пароль нового управляющего<input name="password" type="password" required minLength={12} maxLength={256} autoComplete="new-password"/></label></>}</>
             <button disabled={busy}>Создать сотрудника</button>
           </form>
         </section>
+        <EmployeePanel key={identity.user.id} users={users} actor={actor} refresh={refresh}/>
         <section><h2>Доверенные браузеры</h2><ul>{devices.map(device => <li key={device.id}>{device.label} · {device.revoked ? 'доступ отозван' : `действует до ${new Date(device.expires_at).toLocaleDateString('ru-RU')}`} {!device.revoked && <button disabled={busy} onClick={() => void perform(async () => { await api('/devices/' + device.id + '/revoke', 'POST', {}, actor); })}>Отозвать доступ</button>}</li>)}</ul>
           <form onSubmit={event => submit(event, async data => { const result = await api<{ code: string }>('/devices/enrollment', 'POST', { password: text(data, 'password') }, actor); setEnrollment(result.code); })}>
             <h3>Выдать одноразовый код регистрации</h3><label>Повторите пароль управляющего<input name="password" type="password" maxLength={256} required autoComplete="current-password" /></label><button disabled={busy}>Создать код на 10 минут</button>
