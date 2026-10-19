@@ -54,7 +54,7 @@ jobs:
         working-directory: web
       - run: npm run build
         working-directory: web
-      - name: Browser handover and read-only history
+      - name: Browser handover, history and remote manager
         env:
           PC_CLUB_BROWSER_TEST: '1'
           PC_CLUB_CHROMIUM: /usr/bin/google-chrome

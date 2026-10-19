@@ -94,7 +94,7 @@ func TestHandoverBrowser(t *testing.T) {
 	browserContext, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	command := exec.CommandContext(browserContext, "node", "../../web/e2e/handover.mjs")
-	command.Env = append(os.Environ(), "PC_CLUB_E2E_URL="+server.URL, "PC_CLUB_E2E_DEVICE="+device, "PC_CLUB_E2E_OWNER="+owner.ID, "PC_CLUB_E2E_RECEIVER="+receiver.ID)
+	command.Env = append(os.Environ(), "PC_CLUB_E2E_URL="+server.URL, "PC_CLUB_E2E_DEVICE="+device, "PC_CLUB_E2E_OWNER="+owner.ID, "PC_CLUB_E2E_RECEIVER="+receiver.ID, "PC_CLUB_E2E_MANAGER_PASSWORD="+password)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("browser scenario failed: %v\n%s", err, output)

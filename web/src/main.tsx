@@ -6,6 +6,7 @@ import type { Identity, User } from './api';
 import './style.css';
 import { ChecklistPanel } from './ChecklistPanel';
 import { HistoryPanel } from './HistoryPanel';
+import { ManagerDashboard } from './ManagerDashboard';
 
 function App() {
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -74,7 +75,7 @@ function App() {
   const actor = identity?.user.id ?? '';
 
   return <main>
-    <header><p className="brand">PC CLUB ADMIN</p><span>Этап 6 · История смен</span></header>
+    <header><p className="brand">PC CLUB ADMIN</p><span>Этап 7 · Панель руководителя</span></header>
     <h1>{identity ? identity.user.display_name : 'Вход в приложение'}</h1>
     <section className="notice"><h2>{environment === 'production' ? 'Production: рабочие операции заблокированы' : environment === 'test' ? 'Тестовый режим' : 'Проверяем режим работы'} · Кассовая политика не подтверждена</h2><p>Доступны opening-черновик и чек-лист. Первый приём и касса доступны только с синтетическими данными. Передача требует двух личных входов и отдельного пересчёта принимающего. Production заблокирован до проверки денежной политики.</p></section>
     {message && <p className="error" role="alert">{message}</p>}
@@ -83,6 +84,7 @@ function App() {
         <p>{identity.device_trusted ? 'Браузер зарегистрирован в клубе.' : 'Удалённый вход. Доверие клубному браузеру не назначено.'}</p>
         <button disabled={busy} onClick={() => void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); })}>Выйти / сменить сотрудника</button>
       </section>
+      {identity.user.roles.includes('manager')&&<ManagerDashboard key={'dashboard:'+identity.user.id}/>}
       <HistoryPanel key={'history:'+identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} timezone={clubTimezone}/>
       <ChecklistPanel key={identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} excelSyncEnabled={excelSyncEnabled} onSessionEnd={refresh} />
       {identity.user.roles.includes('manager') && <>
