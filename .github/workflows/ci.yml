@@ -1,0 +1,59 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_USER: pcclub
+          POSTGRES_PASSWORD: ci-synthetic-only
+          POSTGRES_DB: pcclub_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U pcclub -d pcclub_test"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgres://pcclub:ci-synthetic-only@localhost:5432/pcclub_test?sslmode=disable
+      TEST_DATABASE_URL: postgres://pcclub:ci-synthetic-only@localhost:5432/pcclub_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.3'
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: go mod download
+      - run: test -z "$(gofmt -l cmd internal migrations)"
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go test -race ./...
+      - run: go test -race -tags=integration ./internal/storage/postgres -count=1
+      - run: go run ./cmd/migrate up
+      - run: go build ./cmd/api ./cmd/migrate
+      - run: npm ci
+        working-directory: web
+      - run: npm run lint
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: |
+          go run ./cmd/api &
+          API_PID=$!
+          trap 'kill "$API_PID"' EXIT
+          for i in {1..30}; do
+            if curl --fail http://127.0.0.1:8080/readyz; then break; fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:8080/healthz
+          curl --fail http://127.0.0.1:8080/readyz
+          curl --fail http://127.0.0.1:8080/api/v1/status
+          curl --fail http://127.0.0.1:8080/ | grep 'lang="ru"'

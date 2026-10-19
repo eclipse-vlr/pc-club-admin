@@ -1,0 +1,10 @@
+/reference/
+.env
+.env.*
+!.env.example
+/web/node_modules/
+/web/dist/
+/bin/
+/coverage*
+/backups/
+*.log
