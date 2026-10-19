@@ -65,6 +65,7 @@ type NoteInput struct {
 
 type Tx interface {
 	auth.Tx
+	ListAudit(AuditFilter) ([]AuditRecord, error)
 	DashboardSource() (time.Time, string, string, bool, error)
 	CashSavedReport(string) (*time.Time, int64, error)
 	ListHistory(HistoryFilter, string, bool) ([]ShiftSummary, error)

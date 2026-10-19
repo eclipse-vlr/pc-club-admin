@@ -5247,6 +5247,149 @@
         },
         "parameters": []
       }
+    },
+    "/api/v1/audit-events": {
+      "get": {
+        "operationId": "getAuditEvents",
+        "summary": "Управляющий: метаданные журнала действий без произвольного details",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "События по убыванию ID; from включительно, to исключительно. Сохраняйте фильтры при пагинации.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Недопустимые фильтры, курсор или параметры"
+          },
+          "401": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "actor_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "entity_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -7331,6 +7474,76 @@
               }
             ],
             "nullable": true
+          }
+        }
+      },
+      "AuditRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "actor_id",
+          "actor_name",
+          "device_id",
+          "action",
+          "entity_id",
+          "request_id",
+          "reason",
+          "created_at",
+          "success"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "actor_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "actor_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "device_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "action": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AuditPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditRecord"
+            }
+          },
+          "next_cursor": {
+            "type": "string"
           }
         }
       }
