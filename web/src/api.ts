@@ -1,9 +1,9 @@
 export type User = { id: string; display_name: string; manager_login: string; roles: string[]; active: boolean; version: number };
-export type Identity = { user: User; device_trusted: boolean };
+export type Identity = { user: User; device_trusted: boolean; pin_session: boolean };
 export class APIError extends Error {
   constructor(public code: string, message: string) { super(message); }
 }
-export async function api<T>(path: string, method = 'GET', body?: unknown, actor = ''): Promise<T> {
+export async function api<T>(path: string, method = 'GET', body?: unknown, actor = '', idempotencyKey?: string): Promise<T> {
   const headers: Record<string, string> = {};
   if (method !== 'GET') {
     const response = await fetch('/api/v1/auth/csrf', { cache: 'no-store' });
@@ -12,6 +12,7 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, actor
     headers['X-CSRF-Token'] = token.csrf_token;
     headers['X-Actor-ID'] = actor;
     headers['Content-Type'] = 'application/json';
+    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
   }
   const response = await fetch('/api/v1' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store' });
   if (response.status === 204) return undefined as T;
