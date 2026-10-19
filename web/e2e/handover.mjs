@@ -13,6 +13,23 @@ try{
  page.setDefaultTimeout(12000);
  const scriptErrors=[];page.on('pageerror',error=>scriptErrors.push(error.message));
  await page.goto(url);
+ // A separate remote manager context has no trusted-device cookie.
+ const managerContext=await browser.newContext({viewport:{width:1280,height:900}});
+ const managerPage=await managerContext.newPage();managerPage.setDefaultTimeout(12000);
+ managerPage.on('pageerror',error=>scriptErrors.push(error.message));
+ await managerPage.goto(url);
+ await managerPage.getByRole('button',{name:'Управляющий · пароль',exact:true}).click();
+ await managerPage.getByLabel('Логин управляющего',{exact:true}).fill('manager');
+ await managerPage.getByLabel('Пароль',{exact:true}).fill(process.env.PC_CLUB_E2E_MANAGER_PASSWORD);
+ await managerPage.getByRole('button',{name:'Войти как управляющий',exact:true}).click();
+ const dashboard=managerPage.getByRole('region',{name:'Панель руководителя',exact:true});
+ await dashboard.getByRole('heading',{name:'Ответственный: Сдающий E2E',exact:true}).waitFor();
+ assert.equal((await managerContext.cookies()).some(cookie=>cookie.name.endsWith('pcclub_device')),false);
+ async function refreshDashboard(){
+  const updated=managerPage.waitForResponse(response=>response.url().endsWith('/manager/dashboard')&&response.status()===200);
+  await dashboard.getByRole('button',{name:'Обновить панель',exact:true}).click();await updated;
+ }
+
  async function login(user,pin,name){
   await page.locator('select[name="user"]').selectOption(user);
   await page.getByLabel('Личный PIN',{exact:true}).fill(pin);
@@ -20,12 +37,16 @@ try{
   await page.getByRole('heading',{level:1,name}).waitFor();
  }
  await login(process.env.PC_CLUB_E2E_OWNER,'123456','Сдающий E2E');
+ assert.equal(await page.getByRole('region',{name:'Панель руководителя',exact:true}).count(),0);
  const prepare=page.locator('form').filter({has:page.getByRole('button',{name:'Подготовить передачу и выйти',exact:true})});
  await prepare.locator('select[name="receiver"]').selectOption(process.env.PC_CLUB_E2E_RECEIVER);
  await prepare.getByLabel('Мой личный PIN',{exact:true}).fill('123456');
  await prepare.getByRole('button').click();
  await page.getByRole('heading',{level:1,name:'Вход в приложение'}).waitFor();
  assert.equal((await context.request.get(url+'/api/v1/auth/me')).status(),401,'sender session must end');
+ await refreshDashboard();
+ await dashboard.getByText('Принимающий: Принимающий E2E.',{exact:false}).waitFor();
+ await dashboard.getByRole('heading',{name:'Ответственный: Сдающий E2E',exact:true}).waitFor();
  await login(process.env.PC_CLUB_E2E_RECEIVER,'654321','Принимающий E2E');
  await page.getByText('Редакция 1 · Ожидает приёма',{exact:true}).waitFor();
  assert.ok(await page.getByText('Поломка зафиксирована, ремонт не завершён',{exact:false}).count()>0);
@@ -75,6 +96,13 @@ try{
  await snapshot.getByRole('heading',{name:'Снимок передачи · Принята · редакция 1',exact:true}).waitFor();
  await snapshot.getByText('Поломка зафиксирована, ремонт не завершён',{exact:false}).waitFor();
  assert.equal(await detail.locator('input,select,textarea').count(),0,'history is read-only');
+ await refreshDashboard();
+ await dashboard.getByRole('heading',{name:'Ответственный: Принимающий E2E',exact:true}).waitFor();
+ await managerPage.route('**/api/v1/manager/dashboard',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'SERVICE_UNAVAILABLE',message:'Синтетический сбой связи'}})}));
+ await dashboard.getByRole('button',{name:'Обновить панель',exact:true}).click();
+ await dashboard.getByRole('alert').filter({hasText:'Ниже сохранённый снимок; он может быть неактуален'}).waitFor();
+ await dashboard.getByRole('heading',{name:'Ответственный: Принимающий E2E',exact:true}).waitFor();
+ await managerContext.close();
  assert.equal(scriptErrors.length,0,'no browser script errors');
  await context.close();
 }finally{await browser.close();}
