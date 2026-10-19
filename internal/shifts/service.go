@@ -66,6 +66,9 @@ func writable(shift Shift, id auth.Identity) error {
 	if id.Session.DeviceID == "" || !id.DeviceTrusted {
 		return auth.Fail("DEVICE_REQUIRED", 403)
 	}
+	if shift.ParentID != "" && shift.Status == "opening" && (!id.PINSession || id.Session.DeviceID != shift.HandoverDeviceID) {
+		return auth.Fail("DEVICE_REQUIRED", 403)
+	}
 	if shift.Status != "opening" && shift.Status != "active" {
 		return auth.Fail("INVALID_STATE", 409)
 	}
@@ -337,16 +340,16 @@ func (s *Service) Readiness(ctx context.Context, r auth.Request, shiftID string)
 			}
 		}
 	}
-	canActivate := shift.Status == "opening" && len(acceptance.Blockers) == 0 && shift.InitialCash != nil && !s.production
+	canActivate := shift.Status == "opening" && shift.ParentID == "" && len(acceptance.Blockers) == 0 && shift.InitialCash != nil && !s.production
 	if shift.Status == "opening" {
 		blockers = append(blockers, checklists.Blocker{Code: "OPENING_COUNT_REQUIRED", Message: "Для окончательного приёма введите собственный пересчёт и свежий PIN"})
-	} else {
-		blockers = append(blockers, checklists.Blocker{Code: "HANDOVER_NOT_IMPLEMENTED", Message: "Передача следующему сотруднику появится на этапе 5"})
+	} else if shift.Status != "active" {
+		blockers = append(blockers, checklists.Blocker{Code: "HANDOVER_PENDING", Message: "Передача ожидает личного приёма или отзыва сдающим"})
 	}
 	if s.production {
 		blockers = append(blockers, checklists.Blocker{Code: "CASH_POLICY_UNVERIFIED", Message: "Кассовая политика не подтверждена для production"})
 	}
-	result := Readiness{Version: shift.Version, Acceptance: acceptance, Closing: closing, CanActivate: canActivate, Blockers: blockers}
+	result := Readiness{Version: shift.Version, Acceptance: acceptance, Closing: closing, CanActivate: canActivate, CanPrepare: shift.Status == "active" && len(blockers) == 0 && !s.production, Blockers: blockers}
 	if shift.Cash != nil {
 		result.Cash = &shift.Cash.Summary
 	}

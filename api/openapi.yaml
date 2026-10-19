@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "PC Club Admin",
-    "version": "0.4.0",
-    "description": "Этапы 0–4. Тестовый расчёт draft-v1, не проверенная семантика LANGAME. Production shift-операции заблокированы. Денежные мутации и первый приём требуют Idempotency-Key; инкассации/отмены/приём также одноразовый fresh PIN proof. Передача следующему сотруднику ещё отсутствует."
+    "version": "0.5.0",
+    "description": "Этапы 0–5: два личных PIN-входа на одном доверенном браузере, снимок передачи, отдельный пересчёт, ознакомление с заметками и атомарный приём. Только test-mode: политика draft-v1 не проверена на LANGAME, production-мутации заблокированы."
   },
   "servers": [
     {
@@ -3939,6 +3939,920 @@
           }
         ]
       }
+    },
+    "/api/v1/shifts/{id}/handovers": {
+      "post": {
+        "operationId": "post__api_v1_shifts_id_handovers",
+        "summary": "Сдающий: снимок, opening получателя и отзыв личной сессии; proof prepare_handover/shift/version",
+        "security": [
+          {
+            "sessionCookie": [],
+            "deviceCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Actor-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "actor+method+route/target+canonical payload; сохраняется атомарно с результатом, минимум 7 дней"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareHandoverInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Успех или точный повтор прежнего успеха",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Handover"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                },
+                "description": "При точном повторе успешного запроса"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handovers/{id}/cancel": {
+      "post": {
+        "operationId": "post__api_v1_handovers_id_cancel",
+        "summary": "Сдающий: отзыв передачи с причиной, отмена старого черновика приёма",
+        "security": [
+          {
+            "sessionCookie": [],
+            "deviceCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Actor-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "actor+method+route/target+canonical payload; сохраняется атомарно с результатом, минимум 7 дней"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelHandoverInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Успех или точный повтор прежнего успеха",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Handover"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                },
+                "description": "При точном повторе успешного запроса"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handovers/{id}/receipt": {
+      "patch": {
+        "operationId": "patch__api_v1_handovers_id_receipt",
+        "summary": "Назначенный получатель на том же устройстве: отдельный пересчёт",
+        "security": [
+          {
+            "sessionCookie": [],
+            "deviceCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Actor-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "actor+method+route/target+canonical payload; сохраняется атомарно с результатом, минимум 7 дней"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandoverReceiptInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Успех или точный повтор прежнего успеха",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Handover"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                },
+                "description": "При точном повторе успешного запроса"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handovers/{id}/acknowledgements": {
+      "post": {
+        "operationId": "post__api_v1_handovers_id_acknowledgements",
+        "summary": "Назначенный получатель: добавить ознакомление с заметками снимка",
+        "security": [
+          {
+            "sessionCookie": [],
+            "deviceCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Actor-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "actor+method+route/target+canonical payload; сохраняется атомарно с результатом, минимум 7 дней"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandoverAcknowledgeInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Успех или точный повтор прежнего успеха",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Handover"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                },
+                "description": "При точном повторе успешного запроса"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handovers/{id}/accept": {
+      "post": {
+        "operationId": "post__api_v1_handovers_id_accept",
+        "summary": "Личный приём: proof accept_handover/handover/shift_version; проверка обеих версий, кассы и заметок; атомарная граница",
+        "security": [
+          {
+            "sessionCookie": [],
+            "deviceCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Actor-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "actor+method+route/target+canonical payload; сохраняется атомарно с результатом, минимум 7 дней"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptHandoverInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Успех или точный повтор прежнего успеха",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Handover"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                },
+                "description": "При точном повторе успешного запроса"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handovers/{id}": {
+      "get": {
+        "operationId": "getHandover",
+        "summary": "Снимок для участников и управляющего; чтение не продлевает сессию",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успех",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Handover"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -4570,7 +5484,9 @@
           "checklist",
           "notes",
           "cash",
-          "excel_sync"
+          "excel_sync",
+          "handover_parent_id",
+          "handover_id"
         ],
         "properties": {
           "id": {
@@ -4661,6 +5577,14 @@
           },
           "excel_sync": {
             "$ref": "#/components/schemas/ExcelSyncState"
+          },
+          "handover_parent_id": {
+            "type": "string",
+            "description": "UUID или пустая строка при отсутствии связи"
+          },
+          "handover_id": {
+            "type": "string",
+            "description": "UUID или пустая строка при отсутствии связи"
           }
         }
       },
@@ -5289,6 +6213,252 @@
           },
           "last_error_code": {
             "type": "string"
+          }
+        }
+      },
+      "Handover": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "from_shift_id",
+          "to_shift_id",
+          "from_user_id",
+          "to_user_id",
+          "revision",
+          "version",
+          "source_version",
+          "status",
+          "snapshot",
+          "expected_cash_kopecks",
+          "counted_cash_kopecks",
+          "acknowledged_note_ids",
+          "prepared_at",
+          "cancellation_reason",
+          "accepted_at",
+          "cancelled_at",
+          "actual_boundary_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from_shift_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to_shift_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from_user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to_user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "source_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "cancelled"
+            ]
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/Shift"
+          },
+          "expected_cash_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "counted_cash_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "acknowledged_note_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "prepared_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cancellation_reason": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "accepted_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelled_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "actual_boundary_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "PrepareHandoverInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "receiver_id",
+          "version",
+          "reauth_proof"
+        ],
+        "properties": {
+          "receiver_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "reauth_proof": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          }
+        }
+      },
+      "CancelHandoverInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "reason"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        }
+      },
+      "HandoverReceiptInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "version",
+          "counted_cash_kopecks"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "counted_cash_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "HandoverAcknowledgeInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "version",
+          "note_ids"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "note_ids": {
+            "type": "array",
+            "maxItems": 1000,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "AcceptHandoverInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "version",
+          "shift_version",
+          "reauth_proof"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "shift_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "reauth_proof": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
           }
         }
       }

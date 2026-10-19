@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"pc-club-admin/internal/auth"
 	"pc-club-admin/internal/cash"
@@ -27,7 +28,7 @@ func (t *authTx) CurrentShift(owner string, manager bool) (string, error) {
 }
 func (t *authTx) LoadShift(id string) (shifts.Shift, error) {
 	var s shifts.Shift
-	err := t.tx.QueryRow(t.ctx, `SELECT id::text,owner_id::text,business_date::text,kind,status,planned_start_at,planned_end_at,actual_start_at,actual_end_at,template_version,version,initial_cash_kopecks,bootstrap_reason FROM shifts WHERE id=$1 FOR UPDATE`, id).Scan(&s.ID, &s.OwnerID, &s.BusinessDate, &s.Kind, &s.Status, &s.PlannedStart, &s.PlannedEnd, &s.ActualStart, &s.ActualEnd, &s.TemplateVersion, &s.Version, &s.InitialCash, &s.BootstrapReason)
+	err := t.tx.QueryRow(t.ctx, `SELECT id::text,owner_id::text,business_date::text,kind,status,planned_start_at,planned_end_at,actual_start_at,actual_end_at,template_version,version,initial_cash_kopecks,bootstrap_reason,COALESCE(handover_parent_id::text,''),COALESCE((SELECT h.id::text FROM handovers h WHERE (h.from_shift_id=shifts.id OR h.to_shift_id=shifts.id) AND h.status='pending' LIMIT 1),''),COALESCE((SELECT h.device_id::text FROM handovers h WHERE h.to_shift_id=shifts.id AND h.status='pending' LIMIT 1),'') FROM shifts WHERE id=$1 FOR UPDATE`, id).Scan(&s.ID, &s.OwnerID, &s.BusinessDate, &s.Kind, &s.Status, &s.PlannedStart, &s.PlannedEnd, &s.ActualStart, &s.ActualEnd, &s.TemplateVersion, &s.Version, &s.InitialCash, &s.BootstrapReason, &s.ParentID, &s.HandoverID, &s.HandoverDeviceID)
 	if err != nil {
 		return s, storageError(err)
 	}
@@ -66,11 +67,14 @@ func (t *authTx) LoadShift(id string) (shifts.Shift, error) {
 		return s, err
 	}
 	session, err := t.LoadCash(s.ID)
-	if err != nil {
+	missingDraftCash := errors.Is(err, auth.ErrMissing) && s.ParentID != "" && (s.Status == "opening" || s.Status == "cancelled")
+	if err != nil && !missingDraftCash {
 		return s, err
 	}
-	view := cash.View{Session: session, Summary: cash.Evaluate(session)}
-	s.Cash = &view
+	if err == nil {
+		view := cash.View{Session: session, Summary: cash.Evaluate(session)}
+		s.Cash = &view
+	}
 	s.ExcelSync, err = t.loadExcelState(s.ID)
 	if err != nil {
 		return s, err
@@ -88,14 +92,16 @@ func (t *authTx) CreateShift(s *shifts.Shift, actor string) error {
 	if acceptance == 0 || closing == 0 {
 		return auth.Fail("CHECKLIST_TEMPLATE_INVALID", 503)
 	}
-	if err := t.tx.QueryRow(t.ctx, `INSERT INTO shifts(owner_id,business_date,kind,status,planned_start_at,planned_end_at,template_version,initial_cash_kopecks,bootstrap_reason,created_by) VALUES($1,$2::date,$3,'opening',$4,$5,$6,$7,$8,$9) RETURNING id::text`, s.OwnerID, s.BusinessDate, s.Kind, s.PlannedStart, s.PlannedEnd, s.TemplateVersion, s.InitialCash, s.BootstrapReason, actor).Scan(&s.ID); err != nil {
+	if err := t.tx.QueryRow(t.ctx, `INSERT INTO shifts(owner_id,business_date,kind,status,planned_start_at,planned_end_at,template_version,initial_cash_kopecks,bootstrap_reason,created_by,handover_parent_id) VALUES($1,$2::date,$3,'opening',$4,$5,$6,$7,$8,$9,NULLIF($10,'')::uuid) RETURNING id::text`, s.OwnerID, s.BusinessDate, s.Kind, s.PlannedStart, s.PlannedEnd, s.TemplateVersion, s.InitialCash, s.BootstrapReason, actor, s.ParentID).Scan(&s.ID); err != nil {
 		return storageError(err)
 	}
 	if _, err := t.tx.Exec(t.ctx, `INSERT INTO shift_checklist_entries(shift_id,code,phase,label,help_text,allowed_answers,required,sort_order,equipment_check) SELECT $1,code,phase,label,help_text,allowed_answers,required,sort_order,equipment_check FROM checklist_template_items WHERE version=$2`, s.ID, s.TemplateVersion); err != nil {
 		return err
 	}
-	if _, err := t.tx.Exec(t.ctx, "INSERT INTO cash_sessions(shift_id,opening_cash_kopecks) VALUES($1,$2)", s.ID, s.InitialCash); err != nil {
-		return err
+	if s.InitialCash != nil {
+		if _, err := t.tx.Exec(t.ctx, "INSERT INTO cash_sessions(shift_id,opening_cash_kopecks) VALUES($1,$2)", s.ID, s.InitialCash); err != nil {
+			return err
+		}
 	}
 	loaded, err := t.LoadShift(s.ID)
 	if err == nil {
