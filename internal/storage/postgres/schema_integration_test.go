@@ -76,6 +76,9 @@ func TestMigrationLifecycle(t *testing.T) {
 	if err := CheckSchema(ctx, pool, "Asia/Tokyo"); err == nil {
 		t.Fatal("timezone drift accepted")
 	}
+	if Migrate(ctx, pool, "Asia/Tokyo") == nil {
+		t.Fatal("migration accepted config timezone drift")
+	}
 	if _, err := pool.Exec(ctx, "INSERT INTO club_settings(id,timezone) VALUES(2,'UTC')"); err == nil {
 		t.Fatal("second club accepted")
 	}
