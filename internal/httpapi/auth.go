@@ -57,6 +57,15 @@ func (a authHTTP) failure(w http.ResponseWriter, err error) {
 	messages["CHECKLIST_TEMPLATE_INVALID"] = "Шаблон чек-листа не настроен"
 	messages["CASH_POLICY_UNVERIFIED"] = "Работа со сменами в production запрещена до проверки кассовой политики"
 	messages["USER_HAS_UNFINISHED_SHIFT"] = "У сотрудника есть незавершённый черновик или ответственная смена"
+	messages["CASH_INPUT_MISSING"] = "Введите сумму явно; пустое поле не равно нулю"
+	messages["CASH_MISMATCH"] = "Расхождение кассы. Приём или передача запрещены"
+	messages["CASH_OVERFLOW"] = "Сумма выходит за границы int64"
+	messages["CASH_INVALID_AMOUNT"] = "Недопустимая денежная сумма"
+	messages["REAUTH_REQUIRED"] = "Повторите личный PIN: подтверждение истекло, использовано или относится к другим данным"
+	messages["COLLECTION_ALREADY_REVERSED"] = "Эта инкассация уже отменена"
+	messages["CHECKLIST_INCOMPLETE"] = "Чек-лист заполнен не полностью"
+	messages["CHECKLIST_ANSWER_BLOCKS"] = "Один из ответов блокирует завершение чек-листа"
+	messages["NOTE_REQUIRED"] = "Не хватает связанной заметки"
 	message := messages[code]
 	if message == "" {
 		message = "Действие недоступно"
@@ -64,7 +73,11 @@ func (a authHTTP) failure(w http.ResponseWriter, err error) {
 	if status == 429 {
 		w.Header().Set("Retry-After", "300")
 	}
-	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message, "request_id": w.Header().Get("X-Request-ID")}})
+	payload := map[string]any{"code": code, "message": message, "request_id": w.Header().Get("X-Request-ID")}
+	if failure != nil && failure.Details != nil {
+		payload["details"] = failure.Details
+	}
+	writeJSON(w, status, map[string]any{"error": payload})
 }
 func (a authHTTP) mutate(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

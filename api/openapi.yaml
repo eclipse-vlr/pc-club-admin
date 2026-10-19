@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "PC Club Admin",
-    "version": "0.3.0",
-    "description": "Реализованные этапы 0–3: вход и opening-черновик со снимком чек-листа. Активация, касса и передача недоступны. Авторство из сессии, мутации требуют Origin/CSRF/X-Actor-ID. Bootstrap только manager и с Idempotency-Key, изменения ответов только owner PIN-session на доверенном браузере."
+    "version": "0.4.0",
+    "description": "Этапы 0–4. Тестовый расчёт draft-v1, не проверенная семантика LANGAME. Production shift-операции заблокированы. Денежные мутации и первый приём требуют Idempotency-Key; инкассации/отмены/приём также одноразовый fresh PIN proof. Передача следующему сотруднику ещё отсутствует."
   },
   "servers": [
     {
@@ -3222,6 +3222,619 @@
           }
         ]
       }
+    },
+    "/api/v1/shifts/{id}/activate": {
+      "post": {
+        "operationId": "post__api_v1_shifts_id_activate",
+        "summary": "Первый owner: все acceptance + точный личный пересчёт + proof activate_first_shift/shift/version, только test-mode",
+        "security": [
+          {
+            "sessionCookie": [],
+            "deviceCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Actor-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "actor+method+route/target+canonical payload; сохраняется атомарно с результатом, минимум 7 дней"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivateFirstInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Успех или точный повтор прежнего успеха",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shift"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shifts/{id}/cash": {
+      "patch": {
+        "operationId": "patch__api_v1_shifts_id_cash",
+        "summary": "Owner active: полный кассовый черновик; null/пропуск сохраняется как незаполненное, а не 0; version — cash_session",
+        "security": [
+          {
+            "sessionCookie": [],
+            "deviceCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Actor-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "actor+method+route/target+canonical payload; сохраняется атомарно с результатом, минимум 7 дней"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CashInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Успех или точный повтор прежнего успеха",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shifts/{id}/cash/collections": {
+      "post": {
+        "operationId": "post__api_v1_shifts_id_cash_collections",
+        "summary": "Owner active: запись инкассации; proof collection/shift/cash_version",
+        "security": [
+          {
+            "sessionCookie": [],
+            "deviceCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Actor-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "actor+method+route/target+canonical payload; сохраняется атомарно с результатом, минимум 7 дней"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollectionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Успех или точный повтор прежнего успеха",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shifts/{id}/cash/collections/{movement_id}/reverse": {
+      "post": {
+        "operationId": "post__api_v1_shifts_id_cash_collections_movement_id_reverse",
+        "summary": "Owner active: компенсирующая отмена ровно один раз; proof reverse_collection/movement/cash_version",
+        "security": [
+          {
+            "sessionCookie": [],
+            "deviceCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "movement_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Actor-ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "actor+method+route/target+canonical payload; сохраняется атомарно с результатом, минимум 7 дней"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseCollectionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Успех или точный повтор прежнего успеха",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка суммы/доступа/редакции/доказательства PIN/правила либо production unverified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3272,7 +3885,7 @@
           "stage": {
             "type": "string",
             "enum": [
-              "checklists"
+              "cash-test"
             ]
           },
           "environment": {
@@ -3323,6 +3936,11 @@
               },
               "request_id": {
                 "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Безопасные суммы/блокировки бизнес-правил, без секретов и SQL"
               }
             }
           }
@@ -3649,7 +4267,8 @@
               "prepare_handover",
               "accept_handover",
               "collection",
-              "reverse_collection"
+              "reverse_collection",
+              "activate_first_shift"
             ]
           },
           "target_id": {
@@ -3841,7 +4460,8 @@
           "initial_cash_kopecks",
           "bootstrap_reason",
           "checklist",
-          "notes"
+          "notes",
+          "cash"
         ],
         "properties": {
           "id": {
@@ -3921,6 +4541,14 @@
             "items": {
               "$ref": "#/components/schemas/ShiftNote"
             }
+          },
+          "cash": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CashView"
+              }
+            ],
+            "nullable": true
           }
         }
       },
@@ -4134,7 +4762,8 @@
           "closing",
           "can_activate",
           "can_prepare_handover",
-          "blockers"
+          "blockers",
+          "cash"
         ],
         "properties": {
           "version": {
@@ -4150,9 +4779,7 @@
           },
           "can_activate": {
             "type": "boolean",
-            "enum": [
-              false
-            ]
+            "description": "Чек-лист/конфигурация разрешают попытку первого приёма; входной собственный пересчёт/PIN proof проверяются при коммите"
           },
           "can_prepare_handover": {
             "type": "boolean",
@@ -4165,6 +4792,351 @@
             "items": {
               "$ref": "#/components/schemas/Blocker"
             }
+          },
+          "cash": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CashSummary"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "CashMovement": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "amount_kopecks",
+          "reversal_of",
+          "reason",
+          "recipient",
+          "occurred_at",
+          "created_at",
+          "actor_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "collection",
+              "reversal"
+            ]
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "reversal_of": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "CashSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "shift_id",
+          "version",
+          "opening_cash_kopecks",
+          "counted_opening_kopecks",
+          "opening_confirmed_by",
+          "opening_confirmed_at",
+          "langame_cash_amount_kopecks",
+          "extra_cash_refunds_kopecks",
+          "extra_cash_expenses_kopecks",
+          "counted_closing_kopecks",
+          "policy_version",
+          "movements"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "shift_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "opening_cash_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "counted_opening_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "opening_confirmed_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "opening_confirmed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "langame_cash_amount_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "extra_cash_refunds_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "extra_cash_expenses_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "counted_closing_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "policy_version": {
+            "type": "string",
+            "enum": [
+              "draft-v1"
+            ]
+          },
+          "movements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CashMovement"
+            }
+          }
+        }
+      },
+      "CashSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expected_closing_kopecks",
+          "difference_kopecks",
+          "collection_total_kopecks",
+          "policy_version",
+          "verified",
+          "blockers"
+        ],
+        "properties": {
+          "expected_closing_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "difference_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "collection_total_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "policy_version": {
+            "type": "string",
+            "enum": [
+              "draft-v1"
+            ]
+          },
+          "verified": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Blocker"
+            }
+          }
+        }
+      },
+      "CashView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "session",
+          "summary"
+        ],
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/CashSession"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CashSummary"
+          }
+        }
+      },
+      "ActivateFirstInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "counted_opening_kopecks",
+          "reauth_proof",
+          "version"
+        ],
+        "properties": {
+          "counted_opening_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "reauth_proof": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        }
+      },
+      "CashInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "langame_cash_amount_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "extra_cash_refunds_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "extra_cash_expenses_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "counted_closing_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        }
+      },
+      "CollectionInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "amount_kopecks",
+          "reason",
+          "occurred_at",
+          "reauth_proof",
+          "version"
+        ],
+        "properties": {
+          "amount_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "recipient": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reauth_proof": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        }
+      },
+      "ReverseCollectionInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "reauth_proof",
+          "version"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "reauth_proof": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
           }
         }
       }

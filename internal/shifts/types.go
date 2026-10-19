@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"pc-club-admin/internal/auth"
+	"pc-club-admin/internal/cash"
 	"pc-club-admin/internal/checklists"
 	"time"
 )
@@ -24,6 +25,7 @@ type Shift struct {
 	BootstrapReason string             `json:"bootstrap_reason"`
 	Entries         []checklists.Entry `json:"checklist"`
 	Notes           []checklists.Note  `json:"notes"`
+	Cash            *cash.View         `json:"cash"`
 }
 type Readiness struct {
 	Version     int64                `json:"version"`
@@ -32,6 +34,7 @@ type Readiness struct {
 	CanActivate bool                 `json:"can_activate"`
 	CanPrepare  bool                 `json:"can_prepare_handover"`
 	Blockers    []checklists.Blocker `json:"blockers"`
+	Cash        *cash.Summary        `json:"cash"`
 }
 type BootstrapInput struct {
 	OwnerID      string `json:"owner_id"`
@@ -63,6 +66,12 @@ type Tx interface {
 	SaveAnswer(shiftID string, entry checklists.Entry, actor string) error
 	SaveNote(shiftID string, note *checklists.Note, actor string) error
 	BumpShift(id string) error
+	LoadCash(shiftID string) (cash.Session, error)
+	SaveCash(cash.Session) error
+	AppendMovement(cashID string, movement *cash.Movement) error
+	ActivateFirst(shiftID, actor string, counted int64) error
+	OperationResult(actor, route, key string) (hash string, result json.RawMessage, found bool, err error)
+	SaveOperationResult(actor, route, key, hash string, code int, result json.RawMessage) error
 	Idempotency(actor, key string) (hash string, result json.RawMessage, found bool, err error)
 	SaveIdempotency(actor, key, hash string, result json.RawMessage) error
 }

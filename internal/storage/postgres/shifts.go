@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"pc-club-admin/internal/auth"
+	"pc-club-admin/internal/cash"
 	"pc-club-admin/internal/checklists"
 	"pc-club-admin/internal/shifts"
 )
@@ -61,7 +62,16 @@ func (t *authTx) LoadShift(id string) (shifts.Shift, error) {
 		s.Notes = append(s.Notes, n)
 	}
 	rows.Close()
-	return s, rows.Err()
+	if err := rows.Err(); err != nil {
+		return s, err
+	}
+	session, err := t.LoadCash(s.ID)
+	if err != nil {
+		return s, err
+	}
+	view := cash.View{Session: session, Summary: cash.Evaluate(session)}
+	s.Cash = &view
+	return s, nil
 }
 func (t *authTx) CreateShift(s *shifts.Shift, actor string) error {
 	if err := t.tx.QueryRow(t.ctx, "SELECT version FROM checklist_template_versions WHERE published ORDER BY version DESC LIMIT 1").Scan(&s.TemplateVersion); err != nil {
@@ -78,6 +88,9 @@ func (t *authTx) CreateShift(s *shifts.Shift, actor string) error {
 		return storageError(err)
 	}
 	if _, err := t.tx.Exec(t.ctx, `INSERT INTO shift_checklist_entries(shift_id,code,phase,label,help_text,allowed_answers,required,sort_order,equipment_check) SELECT $1,code,phase,label,help_text,allowed_answers,required,sort_order,equipment_check FROM checklist_template_items WHERE version=$2`, s.ID, s.TemplateVersion); err != nil {
+		return err
+	}
+	if _, err := t.tx.Exec(t.ctx, "INSERT INTO cash_sessions(shift_id,opening_cash_kopecks) VALUES($1,$2)", s.ID, s.InitialCash); err != nil {
 		return err
 	}
 	loaded, err := t.LoadShift(s.ID)

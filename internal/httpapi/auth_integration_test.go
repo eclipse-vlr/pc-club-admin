@@ -398,7 +398,7 @@ func TestOpeningChecklistBoundary(t *testing.T) {
 	club.call("PATCH", "/api/v1/shifts/"+shiftID+"/checklist/accept_o", map[string]any{"answer": "yes", "version": 1}, 200)
 	ready = club.call("GET", "/api/v1/shifts/"+shiftID+"/readiness", nil, 200)
 	raw, _ = json.Marshal(ready)
-	if strings.Contains(string(raw), "NOTE_REQUIRED") || ready["acceptance"].(map[string]any)["completed"] != float64(12) || ready["can_activate"] != false {
+	if strings.Contains(string(raw), "NOTE_REQUIRED") || ready["acceptance"].(map[string]any)["completed"] != float64(12) || ready["can_prepare_handover"] != false {
 		t.Fatalf("T06: %+v", ready)
 	}
 	// Publish a later source version: current snapshot must retain its original text.
