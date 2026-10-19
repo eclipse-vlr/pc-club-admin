@@ -104,8 +104,8 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
         <h3>{phase === 'acceptance' ? 'Приём' : 'Сдача'}: {ready ? `${ready[phase].completed} из ${ready[phase].total}` : 'Проверяем…'}</h3>
         {shift.checklist.filter(entry => entry.phase === phase).map(entry => <EntryEditor key={generation + ':' + entry.code + ':' + entry.version} entry={entry} disabled={busy || !editable || (phase === 'acceptance' ? shift.status !== 'opening' : shift.status !== 'active')} onSave={data => saveEntry(entry, data)} />)}
       </div>)}
-      {!(shift.status==='opening'&&shift.handover_parent_id)&&<CashPanel key={generation + ":" + shift.id + ":" + shift.version} identity={identity} shift={shift} readyToActivate={ready?.can_activate === true} refresh={load} />}
-      <HandoverPanel key={generation+":"+shift.id+":"+shift.version} identity={identity} shift={shift} users={users} canPrepare={ready?.can_prepare_handover===true} refresh={load} onSessionEnd={onSessionEnd}/>
+      {!(shift.status==='opening'&&shift.handover_parent_id)&&<CashPanel key={"cash:" + generation + ":" + shift.id + ":" + shift.version} identity={identity} shift={shift} readyToActivate={ready?.can_activate === true} refresh={load} />}
+      <HandoverPanel key={"handover:"+generation+":"+shift.id+":"+shift.version} identity={identity} shift={shift} users={users} canPrepare={ready?.can_prepare_handover===true} refresh={load} onSessionEnd={onSessionEnd}/>
       <h3>Блокирующие причины</h3>
       {ready ? <ul>{ready.blockers.map((blocker, index) => <li key={blocker.code + ':' + index}>{blocker.message}</li>)}</ul> : <p>Проверка ещё не получена.</p>}
       <h3>Замечания</h3>

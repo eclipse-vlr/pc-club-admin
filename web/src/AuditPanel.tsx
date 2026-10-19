@@ -1,14 +1,25 @@
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { formatRubles } from './money';
 import { api, APIError } from './api';
 import type { User } from './api';
 
 type AuditEvent = {
  id: string; actor_id: string|null; actor_name: string|null; device_id: string|null;
+ changes:{field:string;before:string|null;after:string|null}[];
  action: string; entity_id: string; request_id: string; success: boolean; reason: string; created_at: string;
 };
 type AuditPage = {items: AuditEvent[]; next_cursor: string};
+const fields:Record<string,string>={id:"Запись (ID)",kind:"Тип",amount_kopecks:"Сумма",reversal_of:"Отмена записи",reason:"Основание",recipient:"Получатель",occurred_at:"Время операции",actor_id:"Автор (ID)",owner_id:"Ответственный (ID)",from_shift_id:"Сдаваемая смена (ID)",to_shift_id:"Принимаемая смена (ID)",revision:"Редакция",expected_cash_kopecks:"Передаваемая сумма",counted_cash_kopecks:"Пересчёт получателя",status:"Статус",cancellation_reason:"Причина отзыва",actual_boundary_at:"Граница ответственности",accepted_opening_kopecks:"Принятый остаток",template_version:"Версия шаблона",cash:"Кассовая выгрузка",date_from:"Дата от",date_to:"Дата до",row_count:"Число строк",display_name:"Имя",active:"Доступ включён",version:"Версия",answer:"Ответ",comment:"Комментарий",equipment_issue:"Поломка",checklist_code:"Пункт",category:"Категория",object_label:"Объект",text:"Текст",opening_cash_kopecks:"Начальный остаток",counted_opening_kopecks:"Пересчёт при приёме",langame_cash_amount_kopecks:"Операции LANGAME",extra_cash_refunds_kopecks:"Дополнительные возвраты",extra_cash_expenses_kopecks:"Дополнительные расходы",counted_closing_kopecks:"Пересчёт при сдаче",policy_version:"Версия денежной политики"};
+const value=(field:string,text:string|null)=>{
+ if(text===null)return 'Не записано';
+ if(field.endsWith('_kopecks'))return formatRubles(text);
+ if(['active','equipment_issue','cash'].includes(field))return text==='true'?'Да':'Нет';
+ if(field==='answer')return ({yes:'Да',no:'Нет',unanswered:'Не заполнено'}[text]??text);
+ return text;
+};
 const actions: Record<string,string> = {
+ user_updated:"Изменение сотрудника",pin_reset:"Сброс PIN",checklist_answered:"Ответ чек-листа",shift_note_saved:"Сохранение заметки",
  cash_saved: 'Сохранение кассы', shift_request_rejected: 'Отклонённое действие со сменой',
  handover_prepared: 'Подготовка передачи', handover_accepted: 'Приём передачи',
  handover_cancelled: 'Отзыв передачи', handover_receipt_saved: 'Пересчёт получателя',
@@ -72,7 +83,7 @@ export function AuditPanel({users,timezone}:{users:User[];timezone:string}) {
       <dt>Код действия</dt><dd>{item.action}</dd><dt>Объект</dt><dd>{item.entity_id||'Не указан'}</dd>
       <dt>Автор (ID)</dt><dd>{item.actor_id??'Не указан'}</dd><dt>Устройство</dt><dd>{item.device_id??'Не указано'}</dd>
       <dt>Запрос</dt><dd>{item.request_id||'Не указан'}</dd><dt>Причина</dt><dd>{item.reason||'Не указана'}</dd>
-     </dl></details>
+     </dl>{item.changes?.length>0?<table><caption>Изменения</caption><thead><tr><th>Поле</th><th>До</th><th>После</th></tr></thead><tbody>{item.changes.map(change=><tr key={change.field}><th>{fields[change.field]??change.field}</th><td>{value(change.field,change.before)}</td><td>{value(change.field,change.after)}</td></tr>)}</tbody></table>:<p>Для этого события изменения полей не записаны или не представлены.</p>}</details>
     </li>)}</ol>
     <button disabled={!previous.length} onClick={()=>void load(query,previous.at(-1)??'',previous.slice(0,-1))}>Предыдущие события</button>
     <button disabled={!page.next_cursor} onClick={()=>void load(query,page.next_cursor,[...previous,cursor])}>Следующие события</button>
