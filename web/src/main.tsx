@@ -69,9 +69,9 @@ function App() {
   const actor = identity?.user.id ?? '';
 
   return <main>
-    <header><p className="brand">PC CLUB ADMIN</p><span>Этап 3 · Чек-листы</span></header>
+    <header><p className="brand">PC CLUB ADMIN</p><span>Этап 4 · Тестовая касса</span></header>
     <h1>{identity ? identity.user.display_name : 'Вход в приложение'}</h1>
-    <section className="notice"><h2>{environment === 'production' ? 'Production: рабочие операции заблокированы' : environment === 'test' ? 'Тестовый режим' : 'Проверяем режим работы'} · Кассовая политика не подтверждена</h2><p>Доступны opening-черновик и чек-лист. Окончательный приём, касса и передача пока недоступны. Production заблокирован до проверки денежной политики.</p></section>
+    <section className="notice"><h2>{environment === 'production' ? 'Production: рабочие операции заблокированы' : environment === 'test' ? 'Тестовый режим' : 'Проверяем режим работы'} · Кассовая политика не подтверждена</h2><p>Доступны opening-черновик и чек-лист. Первый приём и касса доступны только с синтетическими данными. Передача следующему сотруднику пока недоступна. Production заблокирован до проверки денежной политики.</p></section>
     {message && <p className="error" role="alert">{message}</p>}
     {loading ? <p role="status">Проверяем сессию…</p> : identity ? <>
       <section><h2>Личный вход подтверждён</h2><p>Роли: {identity.user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')}.</p>
