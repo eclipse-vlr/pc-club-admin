@@ -5,16 +5,17 @@ import type { Identity, User } from './api';
 import { parseRubles, stringifyExact } from './money';
 import { CashPanel } from './CashPanel';
 import type { CashView } from './CashPanel';
+import { HandoverPanel } from './HandoverPanel';
 import { ExcelSyncPanel } from './ExcelSyncPanel';
 
 type Entry = { code: string; phase: string; label: string; help_text: string; answer: string; comment: string; equipment_check: boolean; equipment_issue: boolean; answered_by: string | null; version: number };
 type Note = { id: string; checklist_code: string; category: string; object_label: string; text: string; version: number };
-type Shift = { id: string; owner_id: string; status: string; kind: string; business_date: string; template_version: number; version: number; planned_start_at: string; planned_end_at: string; checklist: Entry[]; notes: Note[]; cash: CashView | null };
+type Shift = { handover_id:string;handover_parent_id:string; id: string; owner_id: string; status: string; kind: string; business_date: string; template_version: number; version: number; planned_start_at: string; planned_end_at: string; checklist: Entry[]; notes: Note[]; cash: CashView | null };
 type Blocker = { code: string; item_code?: string; message: string };
 type Progress = { completed: number; total: number; blockers: Blocker[] };
 type Readiness = { acceptance: Progress; closing: Progress; blockers: Blocker[]; can_activate: boolean; can_prepare_handover: boolean };
 
-export function ChecklistPanel({ identity, users,excelSyncEnabled }: { identity: Identity; users: User[];excelSyncEnabled:boolean }) {
+export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }: { identity: Identity; users: User[];excelSyncEnabled:boolean;onSessionEnd:()=>Promise<void> }) {
   const [shift, setShift] = useState<Shift | null>(null);
   const [ready, setReady] = useState<Readiness | null>(null);
   const [error, setError] = useState('');
@@ -79,8 +80,8 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled }: { identity:
     finally { setBusy(false); }
   }
   return <section>
-    <h2>Первый черновик смены и чек-лист</h2>
-    <p>Черновик не назначает ответственного. В тестовом режиме первый приём требует чек-листа, собственного пересчёта и свежего PIN. Передача следующему сотруднику пока недоступна.</p>
+    <h2>Смена и чек-лист</h2>
+    <p>Черновик не назначает ответственного. В тестовом режиме первый приём требует чек-листа, собственного пересчёта и свежего PIN. Для передачи оба сотрудника лично входят по PIN на одном браузере.</p>
     <button disabled={busy} onClick={() => void load().catch(() => {})}>Перечитать сохранённые данные</button>
     {error && <p role="alert" className="error">{error}</p>}
     {!loaded ? <p>{error ? 'Данные смены пока не получены. Повторите загрузку.' : 'Загружаем черновик…'}</p> : !shift ? <>
@@ -96,14 +97,15 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled }: { identity:
         <button disabled={busy}>Создать opening-черновик</button>
       </form>}
     </> : <>
-      <p>{shift.business_date} · {shift.kind === 'night' ? 'Ночная 21:00–09:00' : 'Дневная 09:00–21:00'} · {shift.status === 'opening' ? 'Черновик приёма' : shift.status === 'active' ? 'Активная смена' : 'Изменения недоступны'} · Шаблон {shift.template_version}</p>
+      <p>{shift.business_date} · {shift.kind === 'night' ? 'Ночная 21:00–09:00' : 'Дневная 09:00–21:00'} · {shift.status === 'opening' ? 'Черновик приёма' : shift.status === 'active' ? 'Активная смена' : shift.status==='handover_pending'?'Ожидает приёма · ответственность сохраняется':'Изменения недоступны'} · Шаблон {shift.template_version}</p>
       <ExcelSyncPanel key={shift.id} shiftID={shift.id} version={shift.version} enabled={excelSyncEnabled} />
       {!editable && <p>Просмотр без права изменения. Ответы заполняет назначенный администратор после личного PIN-входа.</p>}
       {(['acceptance', 'closing'] as const).map(phase => <div key={phase}>
         <h3>{phase === 'acceptance' ? 'Приём' : 'Сдача'}: {ready ? `${ready[phase].completed} из ${ready[phase].total}` : 'Проверяем…'}</h3>
         {shift.checklist.filter(entry => entry.phase === phase).map(entry => <EntryEditor key={generation + ':' + entry.code + ':' + entry.version} entry={entry} disabled={busy || !editable || (phase === 'acceptance' ? shift.status !== 'opening' : shift.status !== 'active')} onSave={data => saveEntry(entry, data)} />)}
       </div>)}
-      <CashPanel key={generation + ":" + shift.id + ":" + shift.version} identity={identity} shift={shift} readyToActivate={ready?.can_activate === true} refresh={load} />
+      {!(shift.status==='opening'&&shift.handover_parent_id)&&<CashPanel key={generation + ":" + shift.id + ":" + shift.version} identity={identity} shift={shift} readyToActivate={ready?.can_activate === true} refresh={load} />}
+      <HandoverPanel key={generation+":"+shift.id+":"+shift.version} identity={identity} shift={shift} users={users} canPrepare={ready?.can_prepare_handover===true} refresh={load} onSessionEnd={onSessionEnd}/>
       <h3>Блокирующие причины</h3>
       {ready ? <ul>{ready.blockers.map((blocker, index) => <li key={blocker.code + ':' + index}>{blocker.message}</li>)}</ul> : <p>Проверка ещё не получена.</p>}
       <h3>Замечания</h3>

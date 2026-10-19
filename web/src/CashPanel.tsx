@@ -91,6 +91,6 @@ export function CashPanel({ identity, shift, readyToActivate, refresh }: Props) 
       })}><label>Причина отмены<input name="reason" required maxLength={4000} /></label>{pin}<button disabled={disabled}>Отменить обратной записью</button></form>}
     </li>)}</ul>}
     {shift.status === 'active' && <ul>{summary.blockers.map(blocker => <li key={blocker.code}>{blocker.message}</li>)}</ul>}
-    <p>PIN подтверждает запись сотрудника, но не доказывает физическое изъятие. Передача следующему сотруднику появится на этапе 5.</p>
+    <p>PIN подтверждает запись сотрудника, но не доказывает физическое изъятие. Для передачи используйте отдельную форму и личный вход принимающего.</p>
   </div>;
 }

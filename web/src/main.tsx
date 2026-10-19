@@ -71,16 +71,16 @@ function App() {
   const actor = identity?.user.id ?? '';
 
   return <main>
-    <header><p className="brand">PC CLUB ADMIN</p><span>Этап 4 · Тестовая касса</span></header>
+    <header><p className="brand">PC CLUB ADMIN</p><span>Этап 5 · Тестовая передача</span></header>
     <h1>{identity ? identity.user.display_name : 'Вход в приложение'}</h1>
-    <section className="notice"><h2>{environment === 'production' ? 'Production: рабочие операции заблокированы' : environment === 'test' ? 'Тестовый режим' : 'Проверяем режим работы'} · Кассовая политика не подтверждена</h2><p>Доступны opening-черновик и чек-лист. Первый приём и касса доступны только с синтетическими данными. Передача следующему сотруднику пока недоступна. Production заблокирован до проверки денежной политики.</p></section>
+    <section className="notice"><h2>{environment === 'production' ? 'Production: рабочие операции заблокированы' : environment === 'test' ? 'Тестовый режим' : 'Проверяем режим работы'} · Кассовая политика не подтверждена</h2><p>Доступны opening-черновик и чек-лист. Первый приём и касса доступны только с синтетическими данными. Передача требует двух личных входов и отдельного пересчёта принимающего. Production заблокирован до проверки денежной политики.</p></section>
     {message && <p className="error" role="alert">{message}</p>}
     {loading ? <p role="status">Проверяем сессию…</p> : identity ? <>
       <section><h2>Личный вход подтверждён</h2><p>Роли: {identity.user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')}.</p>
         <p>{identity.device_trusted ? 'Браузер зарегистрирован в клубе.' : 'Удалённый вход. Доверие клубному браузеру не назначено.'}</p>
         <button disabled={busy} onClick={() => void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); })}>Выйти / сменить сотрудника</button>
       </section>
-      <ChecklistPanel key={identity.user.id} identity={identity} users={users} excelSyncEnabled={excelSyncEnabled} />
+      <ChecklistPanel key={identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} excelSyncEnabled={excelSyncEnabled} onSessionEnd={refresh} />
       {identity.user.roles.includes('manager') && <>
         <section><h2>Сотрудники</h2><ul>{users.map(user => <li key={user.id}>{user.display_name} · {user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')} · {user.active ? 'активен' : 'отключён'}</li>)}</ul>
           <form onSubmit={event => submit(event, async data => {
