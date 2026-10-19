@@ -1,0 +1,69 @@
+/* global document */
+import process from 'node:process';
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright-core';
+
+const url=process.env.PC_CLUB_E2E_URL;
+assert.ok(url?.startsWith('http://127.0.0.1:')||url?.startsWith('http://[::1]:'),'isolated loopback server required');
+const browser=await chromium.launch({executablePath:process.env.PC_CLUB_CHROMIUM||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+try{
+ const context=await browser.newContext({viewport:{width:1280,height:900}});
+ await context.addCookies([{name:'pcclub_device',value:process.env.PC_CLUB_E2E_DEVICE,url,httpOnly:true,sameSite:'Lax'}]);
+ const page=await context.newPage();
+ page.setDefaultTimeout(12000);
+ const scriptErrors=[];page.on('pageerror',error=>scriptErrors.push(error.message));
+ await page.goto(url);
+ async function login(user,pin,name){
+  await page.locator('select[name="user"]').selectOption(user);
+  await page.getByLabel('Личный PIN',{exact:true}).fill(pin);
+  await page.getByRole('button',{name:'Войти по PIN',exact:true}).click();
+  await page.getByRole('heading',{level:1,name}).waitFor();
+ }
+ await login(process.env.PC_CLUB_E2E_OWNER,'123456','Сдающий E2E');
+ const prepare=page.locator('form').filter({has:page.getByRole('button',{name:'Подготовить передачу и выйти',exact:true})});
+ await prepare.locator('select[name="receiver"]').selectOption(process.env.PC_CLUB_E2E_RECEIVER);
+ await prepare.getByLabel('Мой личный PIN',{exact:true}).fill('123456');
+ await prepare.getByRole('button').click();
+ await page.getByRole('heading',{level:1,name:'Вход в приложение'}).waitFor();
+ assert.equal((await context.request.get(url+'/api/v1/auth/me')).status(),401,'sender session must end');
+ await login(process.env.PC_CLUB_E2E_RECEIVER,'654321','Принимающий E2E');
+ await page.getByText('Редакция 1 · Ожидает приёма',{exact:true}).waitFor();
+ assert.ok(await page.getByText('Поломка зафиксирована, ремонт не завершён',{exact:false}).count()>0);
+ for(let i=0;i<12;i++){
+  const entry=page.locator('form.checklist-item').nth(i);
+  await entry.locator('select[name="answer"]').selectOption('yes');
+  const saved=page.waitForResponse(response=>response.url().includes('/checklist/')&&response.request().method()==='PATCH'&&response.status()===200);
+  await entry.getByRole('button',{name:'Сохранить ответ',exact:true}).click();await saved;
+  await page.waitForFunction(index=>document.querySelectorAll('form.checklist-item')[index]?.textContent?.includes('Сохранено'),i);
+ }
+ async function count(amount){
+  await page.getByLabel('Мой пересчёт наличных · рубли',{exact:true}).fill(amount);
+  const saved=page.waitForResponse(response=>response.url().endsWith('/receipt')&&response.request().method()==='PATCH'&&response.status()===200);
+  await page.getByRole('button',{name:'Сохранить мой пересчёт',exact:true}).click();await saved;
+  await page.waitForFunction(()=>document.querySelector('input[name="counted"]')?.value==='');
+  await page.getByText('Сохранённый пересчёт получателя:',{exact:false}).waitFor();
+  await page.getByRole('button',{name:'Сохранить мой пересчёт',exact:true}).waitFor();
+ }
+ await count('14999,99');
+ const acknowledgement=page.getByLabel('ПК E2E:',{exact:false});
+ await acknowledgement.check();
+ await page.getByRole('button',{name:'Сохранить ознакомление',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('input[name="notes"]')?.disabled===true);
+ await page.getByLabel('Мой личный PIN',{exact:true}).fill('654321');
+ await page.getByRole('button',{name:'Лично принять смену',exact:true}).click();
+ await page.getByRole('alert').filter({hasText:'Ваш пересчёт не совпадает'}).waitFor();
+ await page.getByRole('button',{name:'Проверить сессию и перечитать передачу',exact:true}).click();
+ await page.getByRole('alert').waitFor({state:'hidden'});
+ await page.getByLabel('Мой пересчёт наличных · рубли',{exact:true}).waitFor();
+ await count('15000');
+ // Simulate a lost success response. Reload reconciles the committed operation.
+ await page.route('**/api/v1/handovers/*/accept',async route=>{await route.fetch();await route.abort('connectionreset');});
+ await page.getByLabel('Мой личный PIN',{exact:true}).fill('654321');
+ await page.getByRole('button',{name:'Лично принять смену',exact:true}).click();
+ await page.getByRole('alert').waitFor();
+ await page.unroute('**/api/v1/handovers/*/accept');
+ await page.reload();
+ await page.getByText('Активная смена',{exact:false}).waitFor();
+ assert.equal(scriptErrors.length,0,'no browser script errors');
+ await context.close();
+}finally{await browser.close();}
