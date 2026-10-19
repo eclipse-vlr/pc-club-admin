@@ -65,6 +65,8 @@ type NoteInput struct {
 
 type Tx interface {
 	auth.Tx
+	DashboardSource() (time.Time, string, string, bool, error)
+	CashSavedReport(string) (*time.Time, int64, error)
 	ListHistory(HistoryFilter, string, bool) ([]ShiftSummary, error)
 	ReceivedClosedShift(string, string) (bool, error)
 	ListHandoverHistory(string, string, bool, PageCursor, int) ([]HandoverSummary, error)

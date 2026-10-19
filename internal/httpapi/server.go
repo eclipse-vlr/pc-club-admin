@@ -64,7 +64,7 @@ func NewWithShifts(c config.Config, check Check, logger *slog.Logger, access *au
 			CashPolicy        string `json:"cash_policy_status"`
 			OperationsEnabled bool   `json:"operations_enabled"`
 			ExcelSyncEnabled  bool   `json:"excel_sync_enabled"`
-		}{"PC Club Admin", "history-test", c.Environment, c.Timezone, c.CashPolicyStatus, false, c.ExcelSyncMode == "test" && c.Environment == "test"})
+		}{"PC Club Admin", "manager-dashboard-test", c.Environment, c.Timezone, c.CashPolicyStatus, false, c.ExcelSyncMode == "test" && c.Environment == "test"})
 	})
 	// Reserved namespace: unknown API routes must never return the frontend shell.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

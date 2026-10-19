@@ -70,6 +70,7 @@ func (a authHTTP) failure(w http.ResponseWriter, err error) {
 	messages["HANDOVER_CHANGED"] = "Передача изменена или отозвана. Проверьте данные заново"
 	messages["RECEIPT_MISMATCH"] = "Ваш пересчёт не совпадает с передаваемой суммой. Приём запрещён"
 	messages["NOTE_ACK_REQUIRED"] = "Подтвердите ознакомление со всеми замечаниями сдающего"
+	messages["DASHBOARD_INCONSISTENT"] = "Не удалось получить согласованное состояние клуба. Обновите данные"
 	message := messages[code]
 	if message == "" {
 		message = "Действие недоступно"

@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "PC Club Admin",
-    "version": "0.6.0",
-    "description": "Этапы 0–5: два личных PIN-входа на одном доверенном браузере, снимок передачи, отдельный пересчёт, ознакомление с заметками и атомарный приём. Только test-mode: политика draft-v1 не проверена на LANGAME, production-мутации заблокированы. История: серверная фильтрация прав и keyset-пагинация, read-only детали и снимки передач."
+    "version": "0.7.0",
+    "description": "Этапы 0–5: два личных PIN-входа на одном доверенном браузере, снимок передачи, отдельный пересчёт, ознакомление с заметками и атомарный приём. Только test-mode: политика draft-v1 не проверена на LANGAME, production-мутации заблокированы. История: серверная фильтрация прав и keyset-пагинация, read-only детали и снимки передач. Панель руководителя: серверный снимок состояния без подписи или обхода кассы."
   },
   "servers": [
     {
@@ -5153,6 +5153,100 @@
           }
         ]
       }
+    },
+    "/api/v1/manager/dashboard": {
+      "get": {
+        "operationId": "getManagerDashboard",
+        "summary": "Только управляющий, включая удалённый вход: согласованный снимок ответственности, задержки, передачи и сохранённой кассы. Не продлевает сессию.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успех",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagerDashboard"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": []
+      }
     }
   },
   "components": {
@@ -6944,6 +7038,299 @@
           "next_cursor": {
             "type": "string",
             "description": "Непрозрачный курсор следующей страницы; пустая строка означает конец списка. Не предоставляет права доступа."
+          }
+        }
+      },
+      "DashboardCash": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "opening_cash_kopecks",
+          "counted_opening_kopecks",
+          "opening_confirmed_at",
+          "counted_closing_kopecks",
+          "summary",
+          "state",
+          "last_saved_at",
+          "changed_after_save"
+        ],
+        "properties": {
+          "opening_cash_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "counted_opening_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "opening_confirmed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "counted_closing_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CashSummary"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "opening_unconfirmed",
+              "incomplete",
+              "mismatch",
+              "matched",
+              "invalid"
+            ],
+            "description": "matched означает только совпадение сохранённых входов draft-v1, не проверку физической кассы"
+          },
+          "last_saved_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Время последнего committed cash_saved, не время успешного физического пересчёта"
+          },
+          "changed_after_save": {
+            "type": "boolean",
+            "description": "Версия кассы изменилась после последнего cash_saved либо движения есть без сохранённого отчёта"
+          }
+        }
+      },
+      "DashboardShift": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "owner_id",
+          "owner_name",
+          "business_date",
+          "kind",
+          "status",
+          "planned_start_at",
+          "planned_end_at",
+          "actual_start_at",
+          "actual_end_at",
+          "overdue",
+          "delay_seconds",
+          "acceptance",
+          "closing",
+          "cash"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_name": {
+            "type": "string",
+            "description": "Имя владельца при чтении; сохранённый снимок передачи хранит исходное значение при наличии"
+          },
+          "business_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "day",
+              "night"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "opening",
+              "active",
+              "handover_pending",
+              "closed",
+              "cancelled"
+            ]
+          },
+          "planned_start_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "planned_end_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actual_start_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "actual_end_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "overdue": {
+            "type": "boolean"
+          },
+          "delay_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "acceptance": {
+            "$ref": "#/components/schemas/ChecklistProgress"
+          },
+          "closing": {
+            "$ref": "#/components/schemas/ChecklistProgress"
+          },
+          "cash": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardCash"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "DashboardTransfer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "revision",
+          "receiver_id",
+          "receiver_name",
+          "prepared_at",
+          "expected_cash_kopecks",
+          "counted_cash_kopecks",
+          "receipt_state",
+          "acknowledged_notes",
+          "total_notes",
+          "acceptance"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "receiver_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "receiver_name": {
+            "type": "string"
+          },
+          "prepared_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expected_cash_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "counted_cash_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "nullable": true
+          },
+          "receipt_state": {
+            "type": "string",
+            "enum": [
+              "missing",
+              "mismatch",
+              "matched"
+            ]
+          },
+          "acknowledged_notes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_notes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "acceptance": {
+            "$ref": "#/components/schemas/ChecklistProgress"
+          }
+        }
+      },
+      "ManagerDashboard": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observed_at",
+          "timezone",
+          "state",
+          "cash_policy_status",
+          "production_blocked",
+          "responsible",
+          "initial_opening",
+          "pending_handover"
+        ],
+        "properties": {
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "uninitialized",
+              "opening",
+              "no_responsible",
+              "active",
+              "handover_pending"
+            ]
+          },
+          "cash_policy_status": {
+            "type": "string",
+            "enum": [
+              "unverified"
+            ]
+          },
+          "production_blocked": {
+            "type": "boolean"
+          },
+          "responsible": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardShift"
+              }
+            ],
+            "nullable": true
+          },
+          "initial_opening": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardShift"
+              }
+            ],
+            "nullable": true
+          },
+          "pending_handover": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DashboardTransfer"
+              }
+            ],
+            "nullable": true
           }
         }
       }
