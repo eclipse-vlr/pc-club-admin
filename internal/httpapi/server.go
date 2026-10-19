@@ -15,6 +15,7 @@ import (
 
 	"pc-club-admin/internal/auth"
 	"pc-club-admin/internal/config"
+	"pc-club-admin/internal/shifts"
 )
 
 // Check verifies database connectivity, schema compatibility and persisted settings.
@@ -26,9 +27,19 @@ type status struct {
 }
 
 func New(c config.Config, check Check, logger *slog.Logger, services ...*auth.Service) http.Handler {
+	var access *auth.Service
+	if len(services) > 0 {
+		access = services[0]
+	}
+	return NewWithShifts(c, check, logger, access, nil)
+}
+func NewWithShifts(c config.Config, check Check, logger *slog.Logger, access *auth.Service, work *shifts.Service) http.Handler {
 	mux := http.NewServeMux()
-	if len(services) > 0 && services[0] != nil {
-		authRoutes(mux, c, services[0])
+	if access != nil {
+		authRoutes(mux, c, access)
+	}
+	if work != nil {
+		shiftRoutes(mux, c, work)
 	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, status{Status: "ok"}) })
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +63,7 @@ func New(c config.Config, check Check, logger *slog.Logger, services ...*auth.Se
 			Timezone          string `json:"timezone"`
 			CashPolicy        string `json:"cash_policy_status"`
 			OperationsEnabled bool   `json:"operations_enabled"`
-		}{"PC Club Admin", "auth", c.Environment, c.Timezone, c.CashPolicyStatus, false})
+		}{"PC Club Admin", "checklists", c.Environment, c.Timezone, c.CashPolicyStatus, false})
 	})
 	// Reserved namespace: unknown API routes must never return the frontend shell.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

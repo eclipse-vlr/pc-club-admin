@@ -62,7 +62,7 @@ func (s *Service) identity(tx Tx, r Request, mutation bool) (Identity, error) {
 	if mutation && (r.ActorID != u.ID || !validToken(r.CSRF) || !Equal(session.CSRFHash, Digest(r.CSRF))) {
 		return Identity{}, Fail("SESSION_CHANGED", 403)
 	}
-	return Identity{u, trusted, session}, nil
+	return Identity{User: u, DeviceTrusted: trusted, PINSession: session.DeviceID != "", Session: session}, nil
 }
 func (s *Service) authenticated(ctx context.Context, r Request, role string, mutation bool, fn func(Tx, Identity) error) error {
 	var actor Identity
@@ -90,6 +90,19 @@ func (s *Service) authenticated(ctx context.Context, r Request, role string, mut
 		}
 	}
 	return err
+}
+
+// Authorize rechecks identity within the caller's transaction; it does not open
+// another transaction or grant object ownership. Consumers enforce object rules.
+func (s *Service) Authorize(tx Tx, r Request, role string, mutation bool) (Identity, error) {
+	id, err := s.identity(tx, r, mutation)
+	if err != nil {
+		return Identity{}, err
+	}
+	if role != "" && !id.User.Has(role) {
+		return Identity{}, Fail("FORBIDDEN", 403)
+	}
+	return id, nil
 }
 func audit(tx Tx, r Request, id Identity, action, entity string, success bool, reason string) error {
 	return tx.Audit(Event{ActorID: id.User.ID, DeviceID: id.Session.DeviceID, Action: action, EntityID: entity, RequestID: r.RequestID, Reason: reason, Success: success})
@@ -229,7 +242,7 @@ func (s *Service) Login(ctx context.Context, r Request, subject, secret string, 
 		if err := tx.SaveAttempt(Attempt{Key: keys[1], Start: now, Blocked: now}); err != nil {
 			return err
 		}
-		result = LoginResult{Identity: Identity{u, deviceID != "", session}, Token: token, CSRF: csrf}
+		result = LoginResult{Identity: Identity{User: u, DeviceTrusted: deviceID != "", PINSession: deviceID != "", Session: session}, Token: token, CSRF: csrf}
 		return audit(tx, r, result.Identity, "login", u.ID, true, "")
 	})
 	if err != nil {
@@ -362,6 +375,15 @@ func (s *Service) UpdateUser(ctx context.Context, r Request, userID, name string
 			}
 		}
 		before := map[string]any{"display_name": u.Name, "active": u.Active, "version": u.Version}
+		if u.Active && !active {
+			protected, err := tx.UserHasUnfinishedShift(u.ID)
+			if err != nil {
+				return err
+			}
+			if protected {
+				return Fail("USER_HAS_UNFINISHED_SHIFT", 422)
+			}
+		}
 		u.Name = strings.TrimSpace(name)
 		u.Active = active
 		u.Version++

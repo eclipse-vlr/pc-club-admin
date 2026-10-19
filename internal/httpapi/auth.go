@@ -51,6 +51,12 @@ func (a authHTTP) failure(w http.ResponseWriter, err error) {
 		code, status = "NOT_FOUND", 404
 	}
 	messages := map[string]string{"INVALID_CREDENTIALS": "Неверные данные входа", "AUTH_BLOCKED": "Слишком много попыток. Повторите через 5 минут", "DEVICE_REQUIRED": "Нужен зарегистрированный браузер клуба", "AUTH_REQUIRED": "Войдите в приложение", "SESSION_CHANGED": "Вы вошли как другой сотрудник. Обновите страницу", "CSRF_INVALID": "Проверка запроса не пройдена. Обновите страницу", "FORBIDDEN": "Нет права на это действие", "VERSION_CONFLICT": "Данные изменены. Обновите страницу", "LAST_MANAGER": "Нельзя отключить последнего управляющего", "INVALID_INPUT": "Проверьте обязательные поля", "ALREADY_EXISTS": "Такая запись уже существует", "INVALID_ENROLLMENT": "Код недействителен, использован или истёк"}
+	messages["INVALID_STATE"] = "Этот этап чек-листа сейчас недоступен для изменения"
+	messages["IDEMPOTENCY_CONFLICT"] = "Ключ повтора уже использован с другими данными"
+	messages["ACTIVE_SHIFT_EXISTS"] = "Первую смену можно создать только при отсутствии истории"
+	messages["CHECKLIST_TEMPLATE_INVALID"] = "Шаблон чек-листа не настроен"
+	messages["CASH_POLICY_UNVERIFIED"] = "Работа со сменами в production запрещена до проверки кассовой политики"
+	messages["USER_HAS_UNFINISHED_SHIFT"] = "У сотрудника есть незавершённый черновик или ответственная смена"
 	message := messages[code]
 	if message == "" {
 		message = "Действие недоступно"

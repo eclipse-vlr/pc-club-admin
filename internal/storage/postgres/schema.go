@@ -11,9 +11,9 @@ import (
 	"pc-club-admin/migrations"
 )
 
-const schemaVersion = 2
+const schemaVersion = 3
 
-var migrationNames = []string{"000001_foundation.up.sql", "000002_auth.up.sql"}
+var migrationNames = []string{"000001_foundation.up.sql", "000002_auth.up.sql", "000003_checklists.up.sql"}
 
 func migration(name string) ([]byte, string, error) {
 	sql, err := migrations.Files.ReadFile(name)
