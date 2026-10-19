@@ -3,12 +3,11 @@ package excelsync
 import (
 	"bytes"
 	"context"
-	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
 
-// Check reads metadata and the workbook without PATCH, queue changes or DB
+// Check reads metadata and the workbook without uploads, queue changes or DB
 // access. A successful read does not prove Google's conditional writes work.
 func (d *DriveClient) Check(ctx context.Context) error {
 	metadata, etag, err := d.metadata(ctx)
@@ -18,10 +17,10 @@ func (d *DriveClient) Check(ctx context.Context) error {
 	if metadata.ID != d.fileID || metadata.MIME != MIME || metadata.Trashed || !metadata.Capabilities.CanEdit {
 		return fail("EXCEL_FILE_ACCESS")
 	}
-	if etag == "" || strings.HasPrefix(etag, "W/") {
+	if !strongETag(etag) {
 		return fail("EXCEL_ETAG_REQUIRED")
 	}
-	input, _, err := d.request(ctx, "GET", "/drive/v3/files/"+d.fileID+"?alt=media&supportsAllDrives=true", nil, nil, MaxFileSize)
+	input, _, err := d.request(ctx, "GET", "/drive/v2/files/"+d.fileID+"?alt=media&supportsAllDrives=true", nil, nil, MaxFileSize)
 	if err != nil {
 		return err
 	}

@@ -81,10 +81,14 @@ func TargetHash(fileID string) string {
 }
 
 type fileMetadata struct {
+	ETag   string `json:"etag"`
+	Labels struct {
+		Trashed bool `json:"trashed"`
+	} `json:"labels"`
 	ID           string `json:"id"`
 	MIME         string `json:"mimeType"`
 	MD5          string `json:"md5Checksum"`
-	Size         string `json:"size"`
+	Size         string `json:"fileSize"`
 	Trashed      bool   `json:"trashed"`
 	Capabilities struct {
 		CanEdit bool `json:"canEdit"`
@@ -103,10 +107,10 @@ func (d *DriveClient) Deliver(ctx context.Context, r Record) error {
 		return fail("EXCEL_FILE_ACCESS")
 	}
 	// Do not replace a shared workbook without a provider concurrency token.
-	if etag == "" || strings.HasPrefix(etag, "W/") {
+	if !strongETag(etag) {
 		return fail("EXCEL_ETAG_REQUIRED")
 	}
-	input, _, err := d.request(ctx, "GET", "/drive/v3/files/"+d.fileID+"?alt=media&supportsAllDrives=true", nil, nil, MaxFileSize)
+	input, _, err := d.request(ctx, "GET", "/drive/v2/files/"+d.fileID+"?alt=media&supportsAllDrives=true", nil, nil, MaxFileSize)
 	if err != nil {
 		return err
 	}
@@ -120,7 +124,7 @@ func (d *DriveClient) Deliver(ctx context.Context, r Record) error {
 	if !changed {
 		return nil
 	}
-	body, _, err := d.request(ctx, "PATCH", "/upload/drive/v3/files/"+d.fileID+"?uploadType=media&supportsAllDrives=true&fields=id,md5Checksum", output, map[string]string{"If-Match": etag, "Content-Type": MIME}, 64<<10)
+	body, _, err := d.request(ctx, "PUT", "/upload/drive/v2/files/"+d.fileID+"?uploadType=media&newRevision=true&supportsAllDrives=true&fields=id,md5Checksum", output, map[string]string{"If-Match": etag, "Content-Type": MIME}, 64<<10)
 	if err != nil {
 		return err
 	}
@@ -132,7 +136,7 @@ func (d *DriveClient) Deliver(ctx context.Context, r Record) error {
 }
 
 func (d *DriveClient) metadata(ctx context.Context) (fileMetadata, string, error) {
-	body, headers, err := d.request(ctx, "GET", "/drive/v3/files/"+d.fileID+"?supportsAllDrives=true&fields=id,mimeType,md5Checksum,size,trashed,capabilities(canEdit)", nil, nil, 64<<10)
+	body, headers, err := d.request(ctx, "GET", "/drive/v2/files/"+d.fileID+"?supportsAllDrives=true&fields=id,mimeType,md5Checksum,fileSize,labels(trashed),capabilities(canEdit),etag", nil, nil, 64<<10)
 	if err != nil {
 		return fileMetadata{}, "", err
 	}
@@ -140,7 +144,18 @@ func (d *DriveClient) metadata(ctx context.Context) (fileMetadata, string, error
 	if json.Unmarshal(body, &metadata) != nil {
 		return metadata, "", fail("EXCEL_PROVIDER_RESPONSE")
 	}
-	return metadata, headers.Get("ETag"), nil
+	metadata.Trashed = metadata.Trashed || metadata.Labels.Trashed
+	// v2 exposes the file ETag in JSON even when the HTTP header is absent.
+	// Never manufacture a token from version/MD5 or mix v2 and v3 resources.
+	etag := metadata.ETag
+	header := headers.Get("ETag")
+	if etag != "" && header != "" && etag != header {
+		return metadata, "", fail("EXCEL_PROVIDER_RESPONSE")
+	}
+	if etag == "" {
+		etag = header
+	}
+	return metadata, etag, nil
 }
 
 func (d *DriveClient) request(ctx context.Context, method, path string, body []byte, headers map[string]string, limit int64) ([]byte, http.Header, error) {
@@ -190,3 +205,17 @@ func (d *DriveClient) request(ctx context.Context, method, path string, body []b
 }
 
 func digestMD5(data []byte) string { sum := md5.Sum(data); return hex.EncodeToString(sum[:]) }
+
+// strongETag accepts a single quoted, strong ASCII entity tag, never '*' or a
+// weak/list value. The token must come from Drive; it is not a checksum we mint.
+func strongETag(tag string) bool {
+	if len(tag) < 2 || tag[0] != '"' || tag[len(tag)-1] != '"' {
+		return false
+	}
+	for i := 1; i < len(tag)-1; i++ {
+		if tag[i] < 0x21 || tag[i] == '"' || tag[i] > 0x7e {
+			return false
+		}
+	}
+	return true
+}
