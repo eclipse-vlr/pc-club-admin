@@ -236,6 +236,23 @@ func TestAuthenticationBoundary(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// Expiry is checked when consuming, even if the transaction started earlier.
+	if err := repo.Within(ctx, func(tx auth.Tx) error {
+		p := auth.Proof{Hash: auth.Digest(auth.Token()), ActorID: adminID, Action: "collection", TargetID: adminID, SessionHash: auth.Digest(oldSession.Value), Revision: 1, Expires: time.Now()}
+		if err := tx.SaveProof(p); err != nil {
+			return err
+		}
+		ok, err := tx.ConsumeProof(p)
+		if err != nil {
+			return err
+		}
+		if ok {
+			t.Error("expired proof accepted using the transaction start time")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	// Same browser switches to manager: old personal session must be invalid.
 	club.call("POST", "/api/v1/auth/manager-login", map[string]any{"login": "manager", "password": password}, 200)
 	var revoked bool
@@ -394,7 +411,7 @@ func TestOpeningChecklistBoundary(t *testing.T) {
 	if !strings.Contains(string(raw), "NOTE_REQUIRED") {
 		t.Fatal("equipment note not required")
 	}
-	club.call("POST", "/api/v1/shifts/"+shiftID+"/notes", map[string]any{"checklist_code": "accept_i", "category": "equipment", "object_label": "ПК-01", "text": "Не включается. Ремонт ещё не выполнен"}, 201)
+	acceptanceNote := club.call("POST", "/api/v1/shifts/"+shiftID+"/notes", map[string]any{"checklist_code": "accept_i", "category": "equipment", "object_label": "ПК-01", "text": "Не включается. Ремонт ещё не выполнен"}, 201)
 	club.call("PATCH", "/api/v1/shifts/"+shiftID+"/checklist/accept_o", map[string]any{"answer": "yes", "version": 1}, 200)
 	ready = club.call("GET", "/api/v1/shifts/"+shiftID+"/readiness", nil, 200)
 	raw, _ = json.Marshal(ready)
@@ -409,11 +426,27 @@ func TestOpeningChecklistBoundary(t *testing.T) {
 	if unchanged["template_version"] != float64(1) || unchanged["checklist"].([]any)[0].(map[string]any)["label"] != entries[0].(map[string]any)["label"] {
 		t.Fatal("T25 snapshot changed")
 	}
-	// Test-only active fixture to exercise closing rules; the app has no activation endpoint yet.
+	// Test-only active fixture to exercise closing rules independently of cash.
 	if _, err := pool.Exec(ctx, "UPDATE shifts SET status='active',actual_start_at=planned_start_at WHERE id=$1", shiftID); err != nil {
 		t.Fatal(err)
 	}
 	club.call("PATCH", "/api/v1/shifts/"+shiftID+"/checklist/accept_o", map[string]any{"answer": "no", "version": 2}, 409)
+	// Rebinding must not remove an accepted equipment note from the frozen phase.
+	notePath := "/api/v1/shifts/" + shiftID + "/notes/" + acceptanceNote["id"].(string)
+	for _, input := range []map[string]any{
+		{"checklist_code": "", "category": "general", "text": "Попытка скрыть неисправность", "version": 1},
+		{"checklist_code": "close_v", "category": "equipment", "object_label": "ПК-01", "text": "Попытка перенести в сдачу", "version": 1},
+	} {
+		club.call("PATCH", notePath, input, 409)
+	}
+	var originalCode string
+	var noteVersion int
+	if err := pool.QueryRow(ctx, "SELECT checklist_code,version FROM shift_notes WHERE id=$1", acceptanceNote["id"]).Scan(&originalCode, &noteVersion); err != nil {
+		t.Fatal(err)
+	}
+	if originalCode != "accept_i" || noteVersion != 1 {
+		t.Fatal("accepted equipment evidence was changed")
+	}
 	for _, v := range entries {
 		e := v.(map[string]any)
 		if e["phase"] == "closing" {

@@ -49,7 +49,7 @@ export function CashPanel({ identity, shift, readyToActivate, refresh }: Props) 
   return <div className="cash-panel">
     <h3>Тестовый расчёт кассы · {summary.policy_version}</h3>
     <p>Политика не проверена на реальной смене. Вводите только синтетические данные. LANGAME здесь означает только вручную внесённое изменение наличных текущей смены.</p>
-    {error && <p role="alert" className="error">{error} <button type="button" onClick={() => void refresh()}>Перечитать кассу</button></p>}
+    {error && <p role="alert" className="error">{error} <button type="button" onClick={() => void refresh().catch(() => {})}>Перечитать кассу</button></p>}
     <dl><dt>Начальный остаток</dt><dd>{formatRubles(session.opening_cash_kopecks)}</dd><dt>Инкассации минус отмены</dt><dd>{formatRubles(summary.collection_total_kopecks)}</dd><dt>Ожидаемый конец</dt><dd>{formatRubles(summary.expected_closing_kopecks)}</dd><dt>Разница пересчёта</dt><dd>{formatRubles(summary.difference_kopecks)}</dd></dl>
     {editable && shift.status === 'opening' && <form onSubmit={event => void submit(event, async data => {
       const counted = nonnegative(text(data, 'counted'));
