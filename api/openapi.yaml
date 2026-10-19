@@ -1,0 +1,83 @@
+openapi: 3.0.3
+info:
+  title: PC Club Admin — каркас
+  version: 0.1.0
+  description: Только реализованный контракт этапов 0–1. Операционные маршруты раздела 12 ТЗ добавляются вместе с серверной реализацией и тестами.
+servers:
+  - url: /
+paths:
+  /healthz:
+    get:
+      operationId: health
+      summary: Жив ли процесс
+      responses:
+        '200':
+          description: Процесс жив; не подтверждает готовность БД или кассы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /readyz:
+    get:
+      operationId: readiness
+      summary: БД, версия и checksum миграции, конфигурация и ограничение кассы
+      responses:
+        '200':
+          description: Каркас готов в test-mode; это не готовность MVP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: БД/схема недоступны или production заблокирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /api/v1/status:
+    get:
+      operationId: status
+      summary: Публичные несекретные параметры каркаса; пользовательских данных нет
+      responses:
+        '200':
+          description: Операционные endpoints ещё отсутствуют
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatus'
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [ok, ready, blocked, not_ready]
+        reason:
+          type: string
+          enum: [CASH_POLICY_UNVERIFIED, DATABASE_OR_SCHEMA_UNAVAILABLE]
+    ApplicationStatus:
+      type: object
+      additionalProperties: false
+      required: [name, stage, environment, timezone, cash_policy_status, operations_enabled]
+      properties:
+        name:
+          type: string
+          enum: [PC Club Admin]
+        stage:
+          type: string
+          enum: [foundation]
+        environment:
+          type: string
+          enum: [test, production]
+        timezone:
+          type: string
+          example: Europe/Moscow
+        cash_policy_status:
+          type: string
+          enum: [unverified]
+        operations_enabled:
+          type: boolean
+          enum: [false]
