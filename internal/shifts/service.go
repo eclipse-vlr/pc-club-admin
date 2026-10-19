@@ -183,7 +183,11 @@ func (s *Service) Get(ctx context.Context, r auth.Request, shiftID string) (Shif
 		if err != nil {
 			return err
 		}
-		if !readable(shift, id) {
+		allowed, err := s.shiftReadable(tx, shift, id)
+		if err != nil {
+			return err
+		}
+		if !allowed {
 			return auth.ErrMissing
 		}
 		return nil

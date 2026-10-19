@@ -231,6 +231,13 @@ func TestCashUpgradeDoesNotAcceptManagerAmount(t *testing.T) {
 	pool := authDB(t)
 	ctx := context.Background()
 	// The isolated schema is deliberately moved back to v3 to test v4 backfill.
+	historyDown, err := migrations.Files.ReadFile("000007_history_indexes.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, string(historyDown)); err != nil {
+		t.Fatal(err)
+	}
 	handoverDown, err := migrations.Files.ReadFile("000006_handovers.down.sql")
 	if err != nil {
 		t.Fatal(err)

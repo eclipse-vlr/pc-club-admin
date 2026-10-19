@@ -11,6 +11,7 @@ import (
 )
 
 type Shift struct {
+	OwnerName        string             `json:"owner_name"`
 	HandoverDeviceID string             `json:"-"`
 	ParentID         string             `json:"handover_parent_id"`
 	HandoverID       string             `json:"handover_id"`
@@ -64,6 +65,9 @@ type NoteInput struct {
 
 type Tx interface {
 	auth.Tx
+	ListHistory(HistoryFilter, string, bool) ([]ShiftSummary, error)
+	ReceivedClosedShift(string, string) (bool, error)
+	ListHandoverHistory(string, string, bool, PageCursor, int) ([]HandoverSummary, error)
 	CreateHandover(*Handover, Shift, string) error
 	LoadHandover(string) (Handover, error)
 	SaveReceipt(Handover, *int64) error
