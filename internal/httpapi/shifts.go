@@ -13,6 +13,7 @@ func shiftRoutes(mux *http.ServeMux, c config.Config, s *shifts.Service) {
 	historyRoutes(mux, c, s)
 	dashboardRoutes(mux, c, s)
 	auditRoutes(mux, c, s)
+	exportRoutes(mux, c, s)
 	mux.HandleFunc("POST /api/v1/shifts/bootstrap", a.mutate(func(w http.ResponseWriter, r *http.Request) {
 		var in shifts.BootstrapInput
 		if err := decode(r, &in); err != nil {

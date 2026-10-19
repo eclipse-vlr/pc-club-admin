@@ -1,5 +1,6 @@
 /* global document */
 import process from 'node:process';
+import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 
@@ -125,6 +126,26 @@ try{
  await managerPage.unroute('**/api/v1/audit-events?**');
  await audit.getByRole('button',{name:'Обновить журнал',exact:true}).click();
  await audit.getByText('По выбранным фильтрам событий нет.',{exact:true}).waitFor();
+ // Real downloads use the authenticated manager session and server filters.
+ assert.equal(await page.locator('summary').filter({hasText:'Выгрузки CSV'}).count(),0);
+ await managerPage.locator('summary').filter({hasText:'Выгрузки CSV'}).click();
+ const exportsPanel=managerPage.getByRole('region',{name:'Выгрузки CSV',exact:true});
+ await exportsPanel.getByLabel('Дата смены от',{exact:true}).fill('2026-10-19');
+ await exportsPanel.getByLabel('Дата смены до',{exact:true}).fill('2026-10-19');
+ for(const kind of ['shifts','cash']){
+  await exportsPanel.getByLabel('Вид выгрузки',{exact:true}).selectOption(kind);
+  const downloading=managerPage.waitForEvent('download');
+  await exportsPanel.getByRole('button',{name:'Скачать CSV',exact:true}).click();
+  const download=await downloading;
+  assert.equal(download.suggestedFilename(),kind+'.csv');
+  const stream=await download.createReadStream();const chunks=[];
+  for await(const chunk of stream)chunks.push(chunk);
+  const csv=Buffer.concat(chunks).toString('utf8');
+  assert.ok(csv.includes('unverified_test_only'));
+  assert.ok(csv.includes('Сдающий E2E'));
+  if(kind==='cash')assert.ok(csv.includes('15000.00'));
+  await exportsPanel.getByText('Файл передан браузеру для скачивания.',{exact:true}).waitFor();
+ }
  await managerPage.route('**/api/v1/manager/dashboard',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'SERVICE_UNAVAILABLE',message:'Синтетический сбой связи'}})}));
  await dashboard.getByRole('button',{name:'Обновить панель',exact:true}).click();
  await dashboard.getByRole('alert').filter({hasText:'Ниже сохранённый снимок; он может быть неактуален'}).waitFor();

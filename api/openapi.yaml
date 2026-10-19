@@ -5390,6 +5390,238 @@
           }
         ]
       }
+    },
+    "/api/v1/exports/shifts.csv": {
+      "get": {
+        "operationId": "exportShiftsCSV",
+        "summary": "Управляющий: тестовая CSV-выгрузка смен (не более 5000 строк)",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV UTF-8 BOM, разделитель ;. Пустые денежные значения не равны нулю. Политика unverified_test_only.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректный период, сотрудник или параметры"
+          },
+          "401": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "EXPORT_TOO_LARGE: уменьшите период или выберите сотрудника"
+          },
+          "503": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_id",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/exports/cash.csv": {
+      "get": {
+        "operationId": "exportCashCSV",
+        "summary": "Управляющий: тестовая CSV-выгрузка кассы (не более 5000 строк)",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV UTF-8 BOM, разделитель ;. Пустые денежные значения не равны нулю. Политика unverified_test_only.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректный период, сотрудник или параметры"
+          },
+          "401": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "EXPORT_TOO_LARGE: уменьшите период или выберите сотрудника"
+          },
+          "503": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_id",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
