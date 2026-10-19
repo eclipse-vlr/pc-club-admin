@@ -1,0 +1,9 @@
+{$CLUB_DOMAIN} {
+ encode zstd gzip
+ reverse_proxy api:8080 {
+  # App takes identity only from sessions and the direct TCP peer.
+  # Do not enable header-based client IP trust in the Go service.
+  header_up -X-Forwarded-For
+  header_up -X-Real-IP
+ }
+}

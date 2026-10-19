@@ -1,0 +1,80 @@
+# Closed-server example. This release intentionally remains production-blocked.
+name: pc-club-server
+x-app: &app
+  image: pc-club-admin:local
+  build:
+    context: ..
+  environment: &environment
+    APP_ENV: production
+    HTTP_ADDR: 0.0.0.0:8080
+    DATABASE_URL: ${SERVER_DATABASE_URL:?Set server DATABASE_URL with db hostname and encoded password}
+    APP_ORIGIN: https://${CLUB_DOMAIN:?Set the HTTPS hostname}
+    PIN_PEPPER: ${PIN_PEPPER:?Restore the original secret or generate once for a new installation}
+    CLUB_TIMEZONE: ${CLUB_TIMEZONE:-Europe/Moscow}
+    CASH_POLICY_STATUS: unverified
+    DRIVE_EXCEL_SYNC: disabled
+  networks: [backend]
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+services:
+  db:
+    image: postgres:17.6-bookworm
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set database user}
+      POSTGRES_DB: ${POSTGRES_DB:?Set database name}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a private database password}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    networks: [backend]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  migrate:
+    <<: *app
+    entrypoint: [/app/migrate]
+    command: [up]
+    profiles: [tools]
+    depends_on:
+      db:
+        condition: service_healthy
+  admin:
+    <<: *app
+    entrypoint: [/app/admin]
+    profiles: [tools]
+    stdin_open: true
+    tty: true
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    <<: *app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+  proxy:
+    image: caddy:2.11.2-alpine
+    environment:
+      CLUB_DOMAIN: ${CLUB_DOMAIN:?Set the HTTPS hostname}
+    ports: ['80:80', '443:443', '443:443/udp']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [backend, edge]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+networks:
+  backend:
+    internal: true
+  edge:
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
