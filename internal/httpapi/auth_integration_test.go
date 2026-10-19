@@ -388,8 +388,10 @@ func TestOpeningChecklistBoundary(t *testing.T) {
 	club.call("POST", "/api/v1/devices/register", map[string]any{"code": code, "label": "Тестовый браузер"}, 204)
 	club.call("POST", "/api/v1/auth/pin-login", map[string]any{"user_id": other["id"], "pin": "654321"}, 200)
 	club.call("GET", "/api/v1/shifts/"+shiftID, nil, 404)
+	club.call("GET", "/api/v1/shifts/"+shiftID+"/excel-sync", nil, 404)
 	club.call("PATCH", "/api/v1/shifts/"+shiftID+"/checklist/accept_d", map[string]any{"answer": "yes", "version": 1}, 403)
 	club.call("POST", "/api/v1/auth/pin-login", map[string]any{"user_id": owner, "pin": "123456"}, 200)
+	club.call("GET", "/api/v1/shifts/"+shiftID+"/excel-sync", nil, 200)
 	club.call("PATCH", "/api/v1/shifts/"+shiftID+"/checklist/accept_o", map[string]any{"answer": "—", "version": 1}, 400)
 	club.call("PATCH", "/api/v1/shifts/"+shiftID+"/checklist/close_p", map[string]any{"answer": "yes", "version": 1}, 409)
 	for _, v := range entries {

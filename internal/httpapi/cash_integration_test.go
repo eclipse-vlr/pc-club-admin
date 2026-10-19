@@ -231,6 +231,13 @@ func TestCashUpgradeDoesNotAcceptManagerAmount(t *testing.T) {
 	pool := authDB(t)
 	ctx := context.Background()
 	// The isolated schema is deliberately moved back to v3 to test v4 backfill.
+	excelDown, err := migrations.Files.ReadFile("000005_excel_sync.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, string(excelDown)); err != nil {
+		t.Fatal(err)
+	}
 	down, err := migrations.Files.ReadFile("000004_cash.down.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -238,7 +245,7 @@ func TestCashUpgradeDoesNotAcceptManagerAmount(t *testing.T) {
 	if _, err := pool.Exec(ctx, string(down)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, "DELETE FROM schema_migrations WHERE version=4"); err != nil {
+	if _, err := pool.Exec(ctx, "DELETE FROM schema_migrations WHERE version>=4"); err != nil {
 		t.Fatal(err)
 	}
 	var userID, shiftID string

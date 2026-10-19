@@ -56,3 +56,26 @@ func TestAuthConfigurationBoundary(t *testing.T) {
 		})
 	}
 }
+
+func TestExcelSyncConfigurationBoundary(t *testing.T) {
+	for _, tt := range []struct {
+		mode, env, id, path string
+		valid               bool
+	}{
+		{"disabled", "test", "", "", true},
+		{"test", "test", "synthetic-file-id", "/tmp/server-key.json", true},
+		{"test", "test", "", "/tmp/server-key.json", false},
+		{"test", "test", "synthetic-file-id", "", false},
+		{"test", "production", "synthetic-file-id", "/tmp/server-key.json", false},
+		{"enabled", "test", "synthetic-file-id", "/tmp/server-key.json", false},
+		{"test", "test", "../private-file-id", "/tmp/server-key.json", false},
+	} {
+		t.Run(tt.mode+"-"+tt.env+"-"+tt.id+"-"+tt.path, func(t *testing.T) {
+			values := map[string]string{"APP_ENV": tt.env, "APP_ORIGIN": "https://club.example", "DATABASE_URL": "postgres://localhost/pcclub_test", "PIN_PEPPER": "synthetic-pepper-at-least-32-characters", "DRIVE_EXCEL_SYNC": tt.mode, "DRIVE_EXCEL_FILE_ID": tt.id, "DRIVE_EXCEL_CREDENTIALS_FILE": tt.path}
+			_, err := Parse(func(k string) string { return values[k] })
+			if (err == nil) != tt.valid {
+				t.Fatalf("valid=%v err=%v", tt.valid, err)
+			}
+		})
+	}
+}
