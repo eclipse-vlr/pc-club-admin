@@ -11,23 +11,26 @@ import (
 )
 
 type Shift struct {
-	ID              string             `json:"id"`
-	OwnerID         string             `json:"owner_id"`
-	BusinessDate    string             `json:"business_date"`
-	Kind            string             `json:"kind"`
-	Status          string             `json:"status"`
-	PlannedStart    time.Time          `json:"planned_start_at"`
-	PlannedEnd      time.Time          `json:"planned_end_at"`
-	ActualStart     *time.Time         `json:"actual_start_at"`
-	ActualEnd       *time.Time         `json:"actual_end_at"`
-	TemplateVersion int                `json:"template_version"`
-	Version         int64              `json:"version"`
-	InitialCash     *int64             `json:"initial_cash_kopecks"`
-	BootstrapReason string             `json:"bootstrap_reason"`
-	Entries         []checklists.Entry `json:"checklist"`
-	Notes           []checklists.Note  `json:"notes"`
-	Cash            *cash.View         `json:"cash"`
-	ExcelSync       excelsync.State    `json:"excel_sync"`
+	HandoverDeviceID string             `json:"-"`
+	ParentID         string             `json:"handover_parent_id"`
+	HandoverID       string             `json:"handover_id"`
+	ID               string             `json:"id"`
+	OwnerID          string             `json:"owner_id"`
+	BusinessDate     string             `json:"business_date"`
+	Kind             string             `json:"kind"`
+	Status           string             `json:"status"`
+	PlannedStart     time.Time          `json:"planned_start_at"`
+	PlannedEnd       time.Time          `json:"planned_end_at"`
+	ActualStart      *time.Time         `json:"actual_start_at"`
+	ActualEnd        *time.Time         `json:"actual_end_at"`
+	TemplateVersion  int                `json:"template_version"`
+	Version          int64              `json:"version"`
+	InitialCash      *int64             `json:"initial_cash_kopecks"`
+	BootstrapReason  string             `json:"bootstrap_reason"`
+	Entries          []checklists.Entry `json:"checklist"`
+	Notes            []checklists.Note  `json:"notes"`
+	Cash             *cash.View         `json:"cash"`
+	ExcelSync        excelsync.State    `json:"excel_sync"`
 }
 type Readiness struct {
 	Version     int64                `json:"version"`
@@ -61,6 +64,12 @@ type NoteInput struct {
 
 type Tx interface {
 	auth.Tx
+	CreateHandover(*Handover, Shift, string) error
+	LoadHandover(string) (Handover, error)
+	SaveReceipt(Handover, *int64) error
+	Acknowledge(Handover, []string, string) error
+	CancelHandover(Handover, string) error
+	AcceptHandover(Handover, string) error
 	AnyShift() (bool, error)
 	CurrentShift(owner string, manager bool) (string, error)
 	LoadShift(id string) (Shift, error)

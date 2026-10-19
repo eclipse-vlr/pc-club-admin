@@ -274,7 +274,7 @@ func (s *Service) Activate(ctx context.Context, r auth.Request, shiftID, key str
 			replay = true
 			return json.Unmarshal(body, &result)
 		}
-		if shift.Status != "opening" || shift.InitialCash == nil {
+		if shift.Status != "opening" || shift.ParentID != "" || shift.InitialCash == nil {
 			return auth.Fail("INVALID_STATE", 409)
 		}
 		if shift.Version != in.Version {
