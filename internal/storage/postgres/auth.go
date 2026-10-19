@@ -18,9 +18,12 @@ type authTx struct {
 }
 
 func (r AuthRepository) Within(ctx context.Context, fn func(auth.Tx) error) error {
+	return securityTransaction(ctx, r.Pool, func(tx *authTx) error { return fn(tx) })
+}
+func securityTransaction(ctx context.Context, pool *pgxpool.Pool, fn func(*authTx) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	tx, err := r.Pool.Begin(ctx)
+	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -185,3 +188,9 @@ func (t *authTx) Audit(e auth.Event) error {
 }
 
 var _ auth.Repository = AuthRepository{}
+
+func (t *authTx) UserHasUnfinishedShift(userID string) (bool, error) {
+	var exists bool
+	err := t.tx.QueryRow(t.ctx, "SELECT EXISTS(SELECT 1 FROM shifts WHERE owner_id=$1 AND status IN ('opening','active','handover_pending'))", userID).Scan(&exists)
+	return exists, err
+}

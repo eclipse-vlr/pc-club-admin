@@ -11,6 +11,7 @@ import (
 	"pc-club-admin/internal/auth"
 	"pc-club-admin/internal/config"
 	"pc-club-admin/internal/httpapi"
+	"pc-club-admin/internal/shifts"
 	"pc-club-admin/internal/storage/postgres"
 	"syscall"
 	"time"
@@ -45,7 +46,9 @@ func run(logger *slog.Logger) error {
 	if c.ProductionBlocked() {
 		logger.Warn("production operations blocked", "reason", "CASH_POLICY_UNVERIFIED")
 	}
-	server := &http.Server{Addr: c.HTTPAddr, Handler: httpapi.New(c, check, logger, auth.New(postgres.AuthRepository{Pool: pool}, c.PINPepper)), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 16}
+	access := auth.New(postgres.AuthRepository{Pool: pool}, c.PINPepper)
+	work := shifts.New(postgres.ShiftRepository{Pool: pool}, access, c.Timezone, c.ProductionBlocked())
+	server := &http.Server{Addr: c.HTTPAddr, Handler: httpapi.NewWithShifts(c, check, logger, access, work), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 16}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()
 	logger.Info("API started", "address", c.HTTPAddr, "environment", c.Environment)

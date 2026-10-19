@@ -82,6 +82,7 @@ type Tx interface {
 	SaveSession(Session) error
 	RevokeSession(hash string) error
 	RevokeUserSessions(userID string) error
+	UserHasUnfinishedShift(userID string) (bool, error)
 	Device(hash string) (Device, error)
 	Devices() ([]Device, error)
 	SaveDevice(*Device) error
@@ -105,6 +106,7 @@ type Request struct{ SessionToken, DeviceToken, CSRF, ActorID, RequestID, Source
 type Identity struct {
 	User          User    `json:"user"`
 	DeviceTrusted bool    `json:"device_trusted"`
+	PINSession    bool    `json:"pin_session"`
 	Session       Session `json:"-"`
 }
 type LoginResult struct {
