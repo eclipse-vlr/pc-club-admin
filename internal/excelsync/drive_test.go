@@ -15,7 +15,7 @@ import (
 func TestConditionalUploadRecoversUnknownOutcomeWithoutDuplicate(t *testing.T) {
 	var mu sync.Mutex
 	content := template(t)
-	revision, patches := 1, 0
+	revision, uploads := 1, 0
 	loseResponse := true
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -25,8 +25,13 @@ func TestConditionalUploadRecoversUnknownOutcomeWithoutDuplicate(t *testing.T) {
 			w.WriteHeader(404)
 			return
 		}
-		if r.Method == "PATCH" {
-			patches++
+		if r.Method == "PUT" {
+			if r.URL.Path != "/upload/drive/v2/files/synthetic-file-id" || r.URL.Query().Get("uploadType") != "media" || r.URL.Query().Get("newRevision") != "true" {
+				t.Error("wrong v2 conditional upload endpoint")
+				w.WriteHeader(400)
+				return
+			}
+			uploads++
 			if r.Header.Get("If-Match") != `"v`+strconv.Itoa(revision)+`"` {
 				w.WriteHeader(412)
 				return
@@ -52,8 +57,12 @@ func TestConditionalUploadRecoversUnknownOutcomeWithoutDuplicate(t *testing.T) {
 			_, _ = w.Write(content)
 			return
 		}
-		w.Header().Set("ETag", `"v`+strconv.Itoa(revision)+`"`)
-		metadata := fileMetadata{ID: "synthetic-file-id", MIME: MIME, MD5: digestMD5(content)}
+		if r.Method != "GET" || r.URL.Path != "/drive/v2/files/synthetic-file-id" {
+			t.Error("wrong v2 read endpoint")
+			w.WriteHeader(400)
+			return
+		}
+		metadata := fileMetadata{ID: "synthetic-file-id", MIME: MIME, MD5: digestMD5(content), ETag: `"v` + strconv.Itoa(revision) + `"`}
 		metadata.Capabilities.CanEdit = true
 		_ = json.NewEncoder(w).Encode(metadata)
 	}))
@@ -66,7 +75,7 @@ func TestConditionalUploadRecoversUnknownOutcomeWithoutDuplicate(t *testing.T) {
 	if err := client.Deliver(context.Background(), r); err != nil {
 		t.Fatal(err)
 	}
-	if patches != 1 {
+	if uploads != 1 {
 		t.Fatal("reconciliation wrote a duplicate after a lost response")
 	}
 	f := openWorkbook(t, content)
@@ -79,10 +88,10 @@ func TestDriveRejectsConcurrentEditAndMissingToken(t *testing.T) {
 	for _, mode := range []string{"conflict", "no-etag", "wrong-mime", "too-large", "redirect"} {
 		t.Run(mode, func(t *testing.T) {
 			content := template(t)
-			patches := 0
+			uploads := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method == "PATCH" {
-					patches++
+				if r.Method == "PUT" {
+					uploads++
 					w.WriteHeader(412)
 					return
 				}
@@ -118,7 +127,7 @@ func TestDriveRejectsConcurrentEditAndMissingToken(t *testing.T) {
 			if Code(err) != want {
 				t.Fatalf("got %v want %s", err, want)
 			}
-			if mode != "conflict" && patches != 0 {
+			if mode != "conflict" && uploads != 0 {
 				t.Fatal("unsafe upload attempted")
 			}
 		})
