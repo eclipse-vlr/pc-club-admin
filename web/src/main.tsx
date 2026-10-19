@@ -11,6 +11,7 @@ function App() {
   const [options, setOptions] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [environment, setEnvironment] = useState<string | null>(null);
+  const [excelSyncEnabled,setExcelSyncEnabled]=useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [mode, setMode] = useState<'admin' | 'manager'>('admin');
@@ -19,8 +20,9 @@ function App() {
   const [devices, setDevices] = useState<{ id: string; label: string; expires_at: string; revoked: boolean }[]>([]);
 
   async function refresh() {
-    const status = await api<{ environment: string }>('/status');
+    const status = await api<{ environment: string; excel_sync_enabled: boolean }>('/status');
     setEnvironment(status.environment);
+    setExcelSyncEnabled(status.excel_sync_enabled);
     let me: Identity | null = null;
     try { me = await api<Identity>('/auth/me'); }
     catch (error) { if (!(error instanceof APIError) || !['AUTH_REQUIRED', 'DEVICE_REQUIRED'].includes(error.code)) throw error; }
@@ -78,7 +80,7 @@ function App() {
         <p>{identity.device_trusted ? 'Браузер зарегистрирован в клубе.' : 'Удалённый вход. Доверие клубному браузеру не назначено.'}</p>
         <button disabled={busy} onClick={() => void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); })}>Выйти / сменить сотрудника</button>
       </section>
-      <ChecklistPanel key={identity.user.id} identity={identity} users={users} />
+      <ChecklistPanel key={identity.user.id} identity={identity} users={users} excelSyncEnabled={excelSyncEnabled} />
       {identity.user.roles.includes('manager') && <>
         <section><h2>Сотрудники</h2><ul>{users.map(user => <li key={user.id}>{user.display_name} · {user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')} · {user.active ? 'активен' : 'отключён'}</li>)}</ul>
           <form onSubmit={event => submit(event, async data => {

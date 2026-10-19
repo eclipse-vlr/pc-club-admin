@@ -12,14 +12,17 @@ import (
 
 // Config is validated once at startup. DATABASE_URL must never be logged.
 type Config struct {
-	Environment      string
-	HTTPAddr         string
-	DatabaseURL      string
-	Timezone         string
-	CashPolicyStatus string
-	WebDistDir       string
-	Origin           string
-	PINPepper        string
+	Environment          string
+	HTTPAddr             string
+	DatabaseURL          string
+	Timezone             string
+	CashPolicyStatus     string
+	WebDistDir           string
+	Origin               string
+	PINPepper            string
+	ExcelSyncMode        string
+	ExcelFileID          string
+	ExcelCredentialsFile string
 }
 
 func Load() (Config, error) { return Parse(os.Getenv) }
@@ -34,6 +37,22 @@ func Parse(get func(string) string) (Config, error) {
 	c := Config{Environment: value("APP_ENV", "test"), HTTPAddr: value("HTTP_ADDR", "127.0.0.1:8080"), DatabaseURL: get("DATABASE_URL"), Timezone: value("CLUB_TIMEZONE", "Europe/Moscow"), CashPolicyStatus: value("CASH_POLICY_STATUS", "unverified"), WebDistDir: value("WEB_DIST_DIR", "web/dist")}
 	c.Origin = value("APP_ORIGIN", "http://127.0.0.1:8080")
 	c.PINPepper = get("PIN_PEPPER")
+	c.ExcelSyncMode = value("DRIVE_EXCEL_SYNC", "disabled")
+	c.ExcelFileID = get("DRIVE_EXCEL_FILE_ID")
+	c.ExcelCredentialsFile = get("DRIVE_EXCEL_CREDENTIALS_FILE")
+	if c.ExcelSyncMode != "disabled" && c.ExcelSyncMode != "test" {
+		return Config{}, fmt.Errorf("DRIVE_EXCEL_SYNC must be disabled or test")
+	}
+	if c.ExcelSyncMode == "test" {
+		if c.Environment != "test" || len(c.ExcelFileID) < 10 || len(c.ExcelFileID) > 200 || c.ExcelCredentialsFile == "" {
+			return Config{}, fmt.Errorf("excel synchronization requires test mode, file ID and server credential path")
+		}
+		for _, ch := range c.ExcelFileID {
+			if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-", ch) {
+				return Config{}, fmt.Errorf("invalid DRIVE_EXCEL_FILE_ID")
+			}
+		}
+	}
 	if len(c.PINPepper) < 32 {
 		return Config{}, fmt.Errorf("PIN_PEPPER requires at least 32 characters")
 	}

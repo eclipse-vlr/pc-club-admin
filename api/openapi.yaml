@@ -3835,6 +3835,110 @@
           }
         }
       }
+    },
+    "/api/v1/shifts/{id}/excel-sync": {
+      "get": {
+        "operationId": "getShiftExcelSync",
+        "summary": "Состояние отправки чек-листа в Excel",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успех",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExcelSyncState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -3873,7 +3977,8 @@
           "environment",
           "timezone",
           "cash_policy_status",
-          "operations_enabled"
+          "operations_enabled",
+          "excel_sync_enabled"
         ],
         "properties": {
           "name": {
@@ -3909,6 +4014,9 @@
             "enum": [
               false
             ]
+          },
+          "excel_sync_enabled": {
+            "type": "boolean"
           }
         }
       },
@@ -4461,7 +4569,8 @@
           "bootstrap_reason",
           "checklist",
           "notes",
-          "cash"
+          "cash",
+          "excel_sync"
         ],
         "properties": {
           "id": {
@@ -4549,6 +4658,9 @@
               }
             ],
             "nullable": true
+          },
+          "excel_sync": {
+            "$ref": "#/components/schemas/ExcelSyncState"
           }
         }
       },
@@ -5137,6 +5249,46 @@
             "type": "integer",
             "format": "int64",
             "minimum": 1
+          }
+        }
+      },
+      "ExcelSyncState": {
+        "type": "object",
+        "required": [
+          "requested_version",
+          "synced_version",
+          "last_attempt_at",
+          "last_success_at",
+          "next_attempt_at",
+          "last_error_code"
+        ],
+        "properties": {
+          "requested_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "synced_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "last_attempt_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "last_success_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "next_attempt_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_error_code": {
+            "type": "string"
           }
         }
       }

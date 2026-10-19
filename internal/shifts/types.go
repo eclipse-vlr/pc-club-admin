@@ -6,6 +6,7 @@ import (
 	"pc-club-admin/internal/auth"
 	"pc-club-admin/internal/cash"
 	"pc-club-admin/internal/checklists"
+	"pc-club-admin/internal/excelsync"
 	"time"
 )
 
@@ -26,6 +27,7 @@ type Shift struct {
 	Entries         []checklists.Entry `json:"checklist"`
 	Notes           []checklists.Note  `json:"notes"`
 	Cash            *cash.View         `json:"cash"`
+	ExcelSync       excelsync.State    `json:"excel_sync"`
 }
 type Readiness struct {
 	Version     int64                `json:"version"`

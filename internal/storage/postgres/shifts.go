@@ -71,6 +71,10 @@ func (t *authTx) LoadShift(id string) (shifts.Shift, error) {
 	}
 	view := cash.View{Session: session, Summary: cash.Evaluate(session)}
 	s.Cash = &view
+	s.ExcelSync, err = t.loadExcelState(s.ID)
+	if err != nil {
+		return s, err
+	}
 	return s, nil
 }
 func (t *authTx) CreateShift(s *shifts.Shift, actor string) error {

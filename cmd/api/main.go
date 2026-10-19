@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"pc-club-admin/internal/auth"
 	"pc-club-admin/internal/config"
+	"pc-club-admin/internal/excelsync"
 	"pc-club-admin/internal/httpapi"
 	"pc-club-admin/internal/shifts"
 	"pc-club-admin/internal/storage/postgres"
@@ -48,6 +49,34 @@ func run(logger *slog.Logger) error {
 	}
 	access := auth.New(postgres.AuthRepository{Pool: pool}, c.PINPepper)
 	work := shifts.New(postgres.ShiftRepository{Pool: pool}, access, c.Timezone, c.ProductionBlocked())
+	workerContext, stopWorker := context.WithCancel(ctx)
+	var workerDone chan struct{}
+	defer func() {
+		stopWorker()
+		if workerDone != nil {
+			<-workerDone
+		}
+	}()
+	if c.ExcelSyncMode == "test" && c.Environment == "test" {
+		remote, err := excelsync.NewDriveClient(workerContext, c.ExcelCredentialsFile, c.ExcelFileID)
+		if err != nil {
+			return err
+		}
+		repository := postgres.ExcelRepository{Pool: pool}
+		startup, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err = repository.PrepareTarget(startup, excelsync.TargetHash(c.ExcelFileID))
+		cancel()
+		if err != nil {
+			remote.Close()
+			return err
+		}
+		workerDone = make(chan struct{})
+		go func() {
+			defer close(workerDone)
+			defer remote.Close()
+			excelsync.Run(workerContext, repository, excelsync.TargetHash(c.ExcelFileID), remote.Deliver, logger)
+		}()
+	}
 	server := &http.Server{Addr: c.HTTPAddr, Handler: httpapi.NewWithShifts(c, check, logger, access, work), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 16}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()

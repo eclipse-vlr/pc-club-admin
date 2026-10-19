@@ -5,6 +5,7 @@ import type { Identity, User } from './api';
 import { parseRubles, stringifyExact } from './money';
 import { CashPanel } from './CashPanel';
 import type { CashView } from './CashPanel';
+import { ExcelSyncPanel } from './ExcelSyncPanel';
 
 type Entry = { code: string; phase: string; label: string; help_text: string; answer: string; comment: string; equipment_check: boolean; equipment_issue: boolean; answered_by: string | null; version: number };
 type Note = { id: string; checklist_code: string; category: string; object_label: string; text: string; version: number };
@@ -13,7 +14,7 @@ type Blocker = { code: string; item_code?: string; message: string };
 type Progress = { completed: number; total: number; blockers: Blocker[] };
 type Readiness = { acceptance: Progress; closing: Progress; blockers: Blocker[]; can_activate: boolean; can_prepare_handover: boolean };
 
-export function ChecklistPanel({ identity, users }: { identity: Identity; users: User[] }) {
+export function ChecklistPanel({ identity, users,excelSyncEnabled }: { identity: Identity; users: User[];excelSyncEnabled:boolean }) {
   const [shift, setShift] = useState<Shift | null>(null);
   const [ready, setReady] = useState<Readiness | null>(null);
   const [error, setError] = useState('');
@@ -96,6 +97,7 @@ export function ChecklistPanel({ identity, users }: { identity: Identity; users:
       </form>}
     </> : <>
       <p>{shift.business_date} · {shift.kind === 'night' ? 'Ночная 21:00–09:00' : 'Дневная 09:00–21:00'} · {shift.status === 'opening' ? 'Черновик приёма' : shift.status === 'active' ? 'Активная смена' : 'Изменения недоступны'} · Шаблон {shift.template_version}</p>
+      <ExcelSyncPanel key={shift.id} shiftID={shift.id} version={shift.version} enabled={excelSyncEnabled} />
       {!editable && <p>Просмотр без права изменения. Ответы заполняет назначенный администратор после личного PIN-входа.</p>}
       {(['acceptance', 'closing'] as const).map(phase => <div key={phase}>
         <h3>{phase === 'acceptance' ? 'Приём' : 'Сдача'}: {ready ? `${ready[phase].completed} из ${ready[phase].total}` : 'Проверяем…'}</h3>

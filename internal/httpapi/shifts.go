@@ -49,6 +49,14 @@ func shiftRoutes(mux *http.ServeMux, c config.Config, s *shifts.Service) {
 		}
 		writeJSON(w, 200, result)
 	})
+	mux.HandleFunc("GET /api/v1/shifts/{id}/excel-sync", func(w http.ResponseWriter, r *http.Request) {
+		shift, err := s.Get(r.Context(), a.request(w, r), r.PathValue("id"))
+		if err != nil {
+			a.failure(w, err)
+			return
+		}
+		writeJSON(w, 200, shift.ExcelSync)
+	})
 	mux.HandleFunc("PATCH /api/v1/shifts/{id}/checklist/{code}", a.mutate(func(w http.ResponseWriter, r *http.Request) {
 		var in shifts.AnswerInput
 		if err := decode(r, &in); err != nil {
