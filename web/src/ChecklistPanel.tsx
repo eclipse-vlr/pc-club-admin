@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { api, APIError } from './api';
 import type { Identity, User } from './api';
+import { parseRubles, stringifyExact } from './money';
+import { CashPanel } from './CashPanel';
+import type { CashView } from './CashPanel';
 
 type Entry = { code: string; phase: string; label: string; help_text: string; answer: string; comment: string; equipment_check: boolean; equipment_issue: boolean; answered_by: string | null; version: number };
 type Note = { id: string; checklist_code: string; category: string; object_label: string; text: string; version: number };
-type Shift = { id: string; owner_id: string; status: string; kind: string; business_date: string; template_version: number; version: number; planned_start_at: string; planned_end_at: string; checklist: Entry[]; notes: Note[] };
+type Shift = { id: string; owner_id: string; status: string; kind: string; business_date: string; template_version: number; version: number; planned_start_at: string; planned_end_at: string; checklist: Entry[]; notes: Note[]; cash: CashView | null };
 type Blocker = { code: string; item_code?: string; message: string };
 type Progress = { completed: number; total: number; blockers: Blocker[] };
 type Readiness = { acceptance: Progress; closing: Progress; blockers: Blocker[]; can_activate: boolean; can_prepare_handover: boolean };
@@ -42,10 +45,10 @@ export function ChecklistPanel({ identity, users }: { identity: Identity; users:
   async function bootstrap(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
     const amountText = String(data.get('cash') ?? '');
-    const amount = Number(amountText);
-    if (!/^[0-9]+$/.test(amountText) || !Number.isSafeInteger(amount) || amount < 0) { setError('Введите целое неотрицательное число копеек в допустимом диапазоне. Пустое поле не равно нулю.'); return; }
+    let amount: bigint;
+    try { amount = parseRubles(amountText); if (amount < 0n) throw new Error('Начальный остаток не может быть отрицательным'); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Проверьте сумму'); return; }
     const body = { owner_id: String(data.get('owner')), business_date: String(data.get('date')), kind: String(data.get('kind')), opening_cash_kopecks: amount, reason: String(data.get('reason')) };
-    const canonical = JSON.stringify(body);
+    const canonical = stringifyExact(body);
     if (attempt.current?.body !== canonical) attempt.current = { body: canonical, key: crypto.randomUUID() };
     const key = attempt.current.key;
     setBusy(true); setError('');
@@ -74,7 +77,7 @@ export function ChecklistPanel({ identity, users }: { identity: Identity; users:
   }
   return <section>
     <h2>Первый черновик смены и чек-лист</h2>
-    <p>Черновик не назначает ответственного. Окончательный приём и передача пока недоступны.</p>
+    <p>Черновик не назначает ответственного. В тестовом режиме первый приём требует чек-листа, собственного пересчёта и свежего PIN. Передача следующему сотруднику пока недоступна.</p>
     <button disabled={busy} onClick={() => void load()}>Перечитать сохранённые данные</button>
     {error && <p role="alert" className="error">{error}</p>}
     {!loaded ? <p>Загружаем черновик…</p> : !shift ? <>
@@ -84,7 +87,7 @@ export function ChecklistPanel({ identity, users }: { identity: Identity; users:
         <label>Ответственный администратор<select name="owner" required defaultValue=""><option value="" disabled>Выберите сотрудника</option>{users.filter(user => user.active && user.roles.includes('admin')).map(user => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
         <label>Дата начала в часовом поясе клуба<input type="date" name="date" required /></label>
         <label>Смена<select name="kind"><option value="day">Дневная 09:00–21:00</option><option value="night">Ночная 21:00–09:00</option></select></label>
-        <label>Первоначальный пересчёт · копейки<input name="cash" inputMode="numeric" pattern="[0-9]+" required /></label>
+        <label>Первоначальный пересчёт · рубли<input name="cash" inputMode="numeric" required /></label>
         <p>Ноль нужно ввести явно. Это исходная сумма управляющего, ещё не принятый сотрудником остаток.</p>
         <label>Основание первоначальной суммы<textarea name="reason" required maxLength={4000} /></label>
         <button disabled={busy}>Создать opening-черновик</button>
@@ -96,6 +99,7 @@ export function ChecklistPanel({ identity, users }: { identity: Identity; users:
         <h3>{phase === 'acceptance' ? 'Приём' : 'Сдача'}: {ready ? `${ready[phase].completed} из ${ready[phase].total}` : 'Проверяем…'}</h3>
         {shift.checklist.filter(entry => entry.phase === phase).map(entry => <EntryEditor key={generation + ':' + entry.code + ':' + entry.version} entry={entry} disabled={busy || !editable || (phase === 'acceptance' ? shift.status !== 'opening' : shift.status !== 'active')} onSave={data => saveEntry(entry, data)} />)}
       </div>)}
+      <CashPanel key={generation + ":" + shift.id + ":" + shift.version} identity={identity} shift={shift} readyToActivate={ready?.can_activate === true} refresh={load} />
       <h3>Блокирующие причины</h3>
       {ready ? <ul>{ready.blockers.map((blocker, index) => <li key={blocker.code + ':' + index}>{blocker.message}</li>)}</ul> : <p>Проверка ещё не получена.</p>}
       <h3>Замечания</h3>

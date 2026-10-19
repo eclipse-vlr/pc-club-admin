@@ -1,3 +1,4 @@
+import { parseExactJSON, stringifyExact } from './money';
 export type User = { id: string; display_name: string; manager_login: string; roles: string[]; active: boolean; version: number };
 export type Identity = { user: User; device_trusted: boolean; pin_session: boolean };
 export class APIError extends Error {
@@ -14,9 +15,9 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, actor
     headers['Content-Type'] = 'application/json';
     if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
   }
-  const response = await fetch('/api/v1' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store' });
+  const response = await fetch('/api/v1' + path, { method, headers, body: body === undefined ? undefined : stringifyExact(body), cache: 'no-store' });
   if (response.status === 204) return undefined as T;
-  const result: unknown = await response.json();
+  const result: unknown = parseExactJSON(await response.text());
   if (!response.ok) {
     const error = result as { error?: { code?: string; message?: string } };
     throw new APIError(error.error?.code ?? 'REQUEST_FAILED', error.error?.message ?? 'Действие не выполнено');
