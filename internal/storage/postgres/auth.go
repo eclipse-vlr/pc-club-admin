@@ -171,7 +171,9 @@ func (t *authTx) SaveProof(p auth.Proof) error {
 // ConsumeProof is called inside the future operation's transaction; rollback also
 // restores the proof. Session, actor, action, target and revision must all match.
 func (t *authTx) ConsumeProof(p auth.Proof) (bool, error) {
-	tag, err := t.tx.Exec(t.ctx, `UPDATE reauth_proofs p SET used_at=now() WHERE token_hash=$1 AND actor_id=$2 AND action=$3 AND target_id=$4 AND revision=$5 AND session_hash=$6 AND used_at IS NULL AND expires_at>now() AND EXISTS(SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id JOIN trusted_devices d ON d.id=s.device_id WHERE s.token_hash=p.session_hash AND s.user_id=p.actor_id AND s.revoked_at IS NULL AND u.active AND u.auth_version=s.auth_version AND s.idle_expires_at>now() AND s.absolute_expires_at>now() AND d.revoked_at IS NULL AND d.expires_at>now())`, p.Hash, p.ActorID, p.Action, p.TargetID, p.Revision, p.SessionHash)
+	// now() is the transaction start, before a possible wait for the club lock.
+	// Validate the proof and its session/device against the actual consumption time.
+	tag, err := t.tx.Exec(t.ctx, `UPDATE reauth_proofs p SET used_at=clock_timestamp() WHERE token_hash=$1 AND actor_id=$2 AND action=$3 AND target_id=$4 AND revision=$5 AND session_hash=$6 AND used_at IS NULL AND expires_at>clock_timestamp() AND EXISTS(SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id JOIN trusted_devices d ON d.id=s.device_id WHERE s.token_hash=p.session_hash AND s.user_id=p.actor_id AND s.revoked_at IS NULL AND u.active AND u.auth_version=s.auth_version AND s.idle_expires_at>clock_timestamp() AND s.absolute_expires_at>clock_timestamp() AND d.revoked_at IS NULL AND d.expires_at>clock_timestamp())`, p.Hash, p.ActorID, p.Action, p.TargetID, p.Revision, p.SessionHash)
 	return tag.RowsAffected() == 1, err
 }
 func (t *authTx) Audit(e auth.Event) error {

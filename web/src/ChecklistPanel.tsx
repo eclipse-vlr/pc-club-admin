@@ -27,20 +27,22 @@ export function ChecklistPanel({ identity, users }: { identity: Identity; users:
   const message = (cause: unknown) => cause instanceof APIError ? cause.message : 'Связь прервалась. Перечитайте сохранённые данные перед повтором.';
 
   async function apply(result: Shift) {
+    const readiness = await api<Readiness>('/shifts/' + result.id + '/readiness');
     setShift(result);
-    setReady(await api<Readiness>('/shifts/' + result.id + '/readiness'));
+    setReady(readiness);
   }
   async function load() {
     setError(''); setReady(null);
     try {
       const result = await api<{ shift: Shift | null }>('/shifts/current');
-      setShift(result.shift);
       if (result.shift) await apply(result.shift);
+      else setShift(null);
       setGeneration(value => value + 1);
-    } catch (cause) { setError(message(cause)); }
-    finally { setLoaded(true); }
+      setLoaded(true);
+    // Propagate failure so the cash form keeps its uncertainty lock.
+    } catch (cause) { setError(message(cause)); throw cause; }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load().catch(() => {}); }, []);
 
   async function bootstrap(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
@@ -78,9 +80,9 @@ export function ChecklistPanel({ identity, users }: { identity: Identity; users:
   return <section>
     <h2>Первый черновик смены и чек-лист</h2>
     <p>Черновик не назначает ответственного. В тестовом режиме первый приём требует чек-листа, собственного пересчёта и свежего PIN. Передача следующему сотруднику пока недоступна.</p>
-    <button disabled={busy} onClick={() => void load()}>Перечитать сохранённые данные</button>
+    <button disabled={busy} onClick={() => void load().catch(() => {})}>Перечитать сохранённые данные</button>
     {error && <p role="alert" className="error">{error}</p>}
-    {!loaded ? <p>Загружаем черновик…</p> : !shift ? <>
+    {!loaded ? <p>{error ? 'Данные смены пока не получены. Повторите загрузку.' : 'Загружаем черновик…'}</p> : !shift ? <>
       <p>Доступной вам смены или черновика нет.</p>
       {manager && <form onSubmit={event => void bootstrap(event)}>
         <h3>Подготовить первую смену · Только тестовые данные</h3>

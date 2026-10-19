@@ -20,10 +20,11 @@ func ParseRubles(text string) (int64, error) {
 		return 0, ErrMoney
 	}
 	negative := false
-	if text[0] == '-' {
+	switch text[0] {
+	case '-':
 		negative = true
 		text = text[1:]
-	} else if text[0] == '+' {
+	case '+':
 		return 0, ErrMoney
 	}
 	text = strings.ReplaceAll(text, ",", ".")

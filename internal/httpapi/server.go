@@ -73,7 +73,7 @@ func NewWithShifts(c config.Config, check Check, logger *slog.Logger, access *au
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var token [16]byte
 		if _, err := rand.Read(token[:]); err != nil {
-			http.Error(w, "Service unavailable", 503)
+			http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		requestID := hex.EncodeToString(token[:])

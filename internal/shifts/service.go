@@ -72,6 +72,10 @@ func writable(shift Shift, id auth.Identity) error {
 	return nil
 }
 
+func editablePhase(phase, status string) bool {
+	return phase == "acceptance" && status == "opening" || phase == "closing" && status == "active"
+}
+
 // PlannedBounds uses the club's calendar, including an overnight business date.
 func PlannedBounds(date, kind, timezone string) (time.Time, time.Time, error) {
 	location, err := time.LoadLocation(timezone)
@@ -226,7 +230,7 @@ func (s *Service) Answer(ctx context.Context, r auth.Request, shiftID, code stri
 			if entry.Version != in.Version {
 				return auth.Fail("VERSION_CONFLICT", 409)
 			}
-			if entry.Phase == "acceptance" && shift.Status != "opening" || entry.Phase == "closing" && shift.Status != "active" {
+			if !editablePhase(entry.Phase, shift.Status) {
 				return auth.Fail("INVALID_STATE", 409)
 			}
 			if in.EquipmentIssue && !entry.EquipmentCheck {
@@ -277,7 +281,7 @@ func (s *Service) Note(ctx context.Context, r auth.Request, shiftID, noteID stri
 		if in.Category == "equipment" && (strings.TrimSpace(in.Object) == "" || item == nil || !item.EquipmentCheck) || in.Category == "conflict" && (item == nil || item.Code != "conflicts_recorded") || in.Code != "" && item == nil {
 			return auth.Fail("INVALID_INPUT", 400)
 		}
-		if item != nil && (item.Phase == "acceptance" && shift.Status != "opening" || item.Phase == "closing" && shift.Status != "active") {
+		if item != nil && !editablePhase(item.Phase, shift.Status) {
 			return auth.Fail("INVALID_STATE", 409)
 		}
 		note = checklists.Note{ID: noteID, Code: in.Code, Category: in.Category, Object: strings.TrimSpace(in.Object), Text: strings.TrimSpace(in.Text), CreatedBy: id.User.ID, Version: 1}
@@ -289,6 +293,13 @@ func (s *Service) Note(ctx context.Context, r auth.Request, shiftID, noteID stri
 					found = true
 					if old.Version != in.Version {
 						return auth.Fail("VERSION_CONFLICT", 409)
+					}
+					// Authorize the persisted link too: changing the new link must
+					// not turn an accepted note into an editable closing/general note.
+					for _, entry := range shift.Entries {
+						if entry.Code == old.Code && !editablePhase(entry.Phase, shift.Status) {
+							return auth.Fail("INVALID_STATE", 409)
+						}
 					}
 					note.CreatedBy = old.CreatedBy
 					note.Version = old.Version + 1
