@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "PC Club Admin",
-    "version": "0.5.0",
-    "description": "Этапы 0–5: два личных PIN-входа на одном доверенном браузере, снимок передачи, отдельный пересчёт, ознакомление с заметками и атомарный приём. Только test-mode: политика draft-v1 не проверена на LANGAME, production-мутации заблокированы."
+    "version": "0.6.0",
+    "description": "Этапы 0–5: два личных PIN-входа на одном доверенном браузере, снимок передачи, отдельный пересчёт, ознакомление с заметками и атомарный приём. Только test-mode: политика draft-v1 не проверена на LANGAME, production-мутации заблокированы. История: серверная фильтрация прав и keyset-пагинация, read-only детали и снимки передач."
   },
   "servers": [
     {
@@ -2584,7 +2584,7 @@
     "/api/v1/shifts/{id}": {
       "get": {
         "operationId": "get__api_v1_shifts_id",
-        "summary": "Owner с device или manager: снимок, ответы и заметки",
+        "summary": "Детали: владелец, управляющий или получатель закрытой лично принятой смены; чтение без продления сессии",
         "security": [
           {
             "sessionCookie": []
@@ -4100,6 +4100,130 @@
             }
           }
         }
+      },
+      "get": {
+        "operationId": "listShiftHandovers",
+        "summary": "Связанные передачи: участник видит только свои, управляющий — все. Снимок отозванной передачи не открывает последующие правки сдающего.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успех",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverHistoryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "description": ""
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "description": ""
+          }
+        ]
       }
     },
     "/api/v1/handovers/{id}/cancel": {
@@ -4853,6 +4977,182 @@
           }
         ]
       }
+    },
+    "/api/v1/shifts": {
+      "get": {
+        "operationId": "listShiftHistory",
+        "summary": "История: свои смены и закрытые лично принятые смены; управляющий видит все. GET не продлевает сессию.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успех",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShiftHistoryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Ошибка ввода, прав, версии/состояния, повтора или недоступность кассы/БД; см. error.code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Включительная граница business_date, часовой пояс клуба"
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Включительная граница business_date, часовой пояс клуба"
+          },
+          {
+            "in": "query",
+            "name": "owner_id",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Фильтр владельца не расширяет права"
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "day",
+                "night"
+              ]
+            },
+            "description": ""
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "opening",
+                "active",
+                "handover_pending",
+                "closed",
+                "cancelled"
+              ]
+            },
+            "description": ""
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "description": ""
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "description": ""
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -5486,7 +5786,8 @@
           "cash",
           "excel_sync",
           "handover_parent_id",
-          "handover_id"
+          "handover_id",
+          "owner_name"
         ],
         "properties": {
           "id": {
@@ -5585,6 +5886,10 @@
           "handover_id": {
             "type": "string",
             "description": "UUID или пустая строка при отсутствии связи"
+          },
+          "owner_name": {
+            "type": "string",
+            "description": "Имя владельца при чтении; сохранённый снимок передачи хранит исходное значение при наличии"
           }
         }
       },
@@ -6459,6 +6764,186 @@
             "type": "string",
             "minLength": 64,
             "maxLength": 64
+          }
+        }
+      },
+      "ShiftSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "owner_id",
+          "owner_name",
+          "business_date",
+          "kind",
+          "status",
+          "planned_start_at",
+          "planned_end_at",
+          "actual_start_at",
+          "actual_end_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_name": {
+            "type": "string",
+            "description": "Имя владельца при чтении; сохранённый снимок передачи хранит исходное значение при наличии"
+          },
+          "business_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "day",
+              "night"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "opening",
+              "active",
+              "handover_pending",
+              "closed",
+              "cancelled"
+            ]
+          },
+          "planned_start_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "planned_end_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actual_start_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "actual_end_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "HandoverSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "from_shift_id",
+          "to_shift_id",
+          "from_name",
+          "to_name",
+          "revision",
+          "status",
+          "expected_cash_kopecks",
+          "prepared_at",
+          "accepted_at",
+          "cancelled_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from_shift_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to_shift_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "from_name": {
+            "type": "string"
+          },
+          "to_name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "cancelled"
+            ]
+          },
+          "expected_cash_kopecks": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "prepared_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "accepted_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelled_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "ShiftHistoryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ShiftSummary"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Непрозрачный курсор следующей страницы; пустая строка означает конец списка. Не предоставляет права доступа."
+          }
+        }
+      },
+      "HandoverHistoryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/HandoverSummary"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Непрозрачный курсор следующей страницы; пустая строка означает конец списка. Не предоставляет права доступа."
           }
         }
       }
