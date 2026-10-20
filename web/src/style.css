@@ -686,3 +686,10 @@ footer {
 .checklist-item:focus-visible { outline: 3px solid #b16a0b; outline-offset: 4px; border-radius: 12px; }
 .shift-actions { border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-top: 24px; min-width: 0; }
 .shift-actions > legend { padding: 0 8px; font-weight: 600; color: var(--ink); }
+#shift-handover form > fieldset { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+#shift-handover form > fieldset > legend { max-width: 100%; padding: 0 6px; font-weight: 600; color: var(--ink); }
+#workspace:focus-visible, #shift-cash:focus-visible, #shift-notes:focus-visible, #shift-handover:focus-visible, #shift-handover [role="alert"]:focus-visible { outline: 3px solid #b16a0b; outline-offset: 4px; border-radius: 8px; }
+@media (max-width: 480px) {
+  .shift-actions { padding: 12px; }
+  #shift-handover form > fieldset { padding: 12px; }
+}

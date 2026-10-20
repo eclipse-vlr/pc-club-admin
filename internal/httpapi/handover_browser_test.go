@@ -104,4 +104,13 @@ func TestHandoverBrowser(t *testing.T) {
 	if !completed {
 		t.Fatal("browser did not complete an atomic handover")
 	}
+	var prepared, accepted, responsible, transferred int
+	check(pool.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM handovers WHERE from_shift_id=$1),
+		(SELECT count(*) FROM audit_events WHERE action='handover_accepted' AND success),
+		(SELECT count(*) FROM shifts WHERE status IN ('active','handover_pending')),
+		(SELECT count(*) FROM cash_sessions c JOIN shifts s ON s.id=c.shift_id WHERE s.owner_id=$2 AND s.status='active' AND c.opening_cash_kopecks=1500000 AND c.counted_opening_kopecks=1500000)`, shift.ID, receiver.ID).Scan(&prepared, &accepted, &responsible, &transferred))
+	if prepared != 1 || accepted != 1 || responsible != 1 || transferred != 1 {
+		t.Fatalf("recovery duplicated or lost handover effects: prepared=%d accepted=%d responsible=%d cash=%d", prepared, accepted, responsible, transferred)
+	}
 }

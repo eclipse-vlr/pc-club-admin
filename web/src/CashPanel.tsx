@@ -17,6 +17,8 @@ export function CashPanel({ identity, shift, readyToActivate, refresh }: Props) 
   const [noRefunds, setNoRefunds] = useState(shift.cash?.session.extra_cash_refunds_kopecks === '0');
   const [noExpenses, setNoExpenses] = useState(shift.cash?.session.extra_cash_expenses_kopecks === '0');
   const attempt = useRef<{ route: string; body: string; key: string } | null>(null);
+  const inFlight = useRef(false);
+  const needsRead = useRef(false);
   if (!shift.cash) return <p>Кассовая запись не настроена.</p>;
   const { session, summary } = shift.cash;
   const editable = identity.pin_session && identity.device_trusted && identity.user.id === shift.owner_id;
@@ -34,7 +36,10 @@ export function CashPanel({ identity, shift, readyToActivate, refresh }: Props) 
     return api<T>(route, method, body, actor, attempt.current.key);
   }
   async function submit(event: FormEvent<HTMLFormElement>, work: (data: FormData) => Promise<void>) {
-    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+    event.preventDefault();
+    if (inFlight.current || needsRead.current) return;
+    inFlight.current = true;
+    const form = event.currentTarget; const data = new FormData(form);
     form.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
     setBusy(true); setError('');
     try { await work(data); form.reset(); await refresh(); }
@@ -42,11 +47,12 @@ export function CashPanel({ identity, shift, readyToActivate, refresh }: Props) 
       setError(cause instanceof APIError ? cause.message : cause instanceof TypeError ? 'Сетевой результат неизвестен. Перечитайте данные перед новой операцией.' : cause instanceof Error ? cause.message : 'Действие не выполнено');
       // Never blindly recreate a monetary operation with a new proof/key after a timeout.
       setUncertain(true);
-    } finally { setBusy(false); }
+      needsRead.current = true;
+    } finally { inFlight.current = false; setBusy(false); }
   }
   const disabled = busy || uncertain;
   const pin = <label>Личный PIN для этого действия<input name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="off" /></label>;
-  return <div className="cash-panel">
+  return <div className="cash-panel" id="shift-cash" tabIndex={-1}>
     <h3>Тестовый расчёт кассы · {summary.policy_version}</h3>
     <p>Политика не проверена на реальной смене. Вводите только синтетические данные. LANGAME здесь означает только вручную внесённое изменение наличных текущей смены.</p>
     {error && <p role="alert" className="error">{error} <button type="button" onClick={() => void refresh().catch(() => {})}>Перечитать кассу</button></p>}
