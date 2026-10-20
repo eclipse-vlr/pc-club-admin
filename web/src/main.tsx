@@ -10,6 +10,7 @@ import { ExportPanel } from './ExportPanel';
 import { EmployeePanel } from './EmployeePanel';
 import { AuditPanel } from './AuditPanel';
 import { ManagerDashboard } from './ManagerDashboard';
+import { confirmChecklistDiscard, hasUnsavedChecklist } from './checklist-drafts';
 
 function App() {
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -25,6 +26,15 @@ function App() {
  const [newRole,setNewRole]=useState('admin');
   const [enrollment, setEnrollment] = useState('');
   const [devices, setDevices] = useState<{ id: string; label: string; expires_at: string; revoked: boolean }[]>([]);
+
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChecklist()) return;
+      event.preventDefault(); event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, []);
 
   async function refresh() {
     const status = await api<{ environment: string; excel_sync_enabled: boolean;timezone:string }>('/status');
@@ -88,7 +98,7 @@ function App() {
     {loading ? <p role="status">Проверяем сессию…</p> : identity ? <>
       <section className="identity-card"><h2>Личный вход подтверждён</h2><p>Роли: {identity.user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')}.</p>
         <p>{identity.device_trusted ? 'Браузер зарегистрирован в клубе.' : 'Удалённый вход. Доверие клубному браузеру не назначено.'}</p>
-        <button disabled={busy} onClick={() => void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); })}>Выйти / сменить сотрудника</button>
+        <button disabled={busy} onClick={() => { if (!confirmChecklistDiscard()) return; void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); }); }}>Выйти / сменить сотрудника</button>
       </section>
       <nav className="workspace-nav" aria-label="Разделы приложения"><a href="#current-shift">Текущая смена</a><a href="#shift-history">История</a>{identity.user.roles.includes('manager') && <><a href="#club-overview">Обзор клуба</a><a href="#reports">Отчёты и аудит</a><a href="#team">Сотрудники и доступ</a></>}</nav>
       <div id="current-shift"><ChecklistPanel key={identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} excelSyncEnabled={excelSyncEnabled} onSessionEnd={refresh} /></div>

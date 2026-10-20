@@ -670,3 +670,19 @@ footer {
 .excel-status .excel-meta { font-size: 13px; font-weight: 400; }
 .excel-refresh { background: #fff; color: var(--accent); }
 .excel-refresh:hover:not(:disabled) { color: #fff; }
+
+.unsaved-notice, .draft-conflict {
+  padding: 12px 16px;
+  border: 1px solid #ebdbb7;
+  border-radius: 10px;
+  background: #fff9ec;
+  color: #70521e;
+  font-size: 14px;
+}
+.blocker-link { border: 0; background: none; color: #70521e; text-decoration: underline; text-align: left; padding: 4px 0; margin: 0; }
+.blocker-link:hover:not(:disabled) { background: none; color: #493510; }
+.checklist-jump { background: #fff; color: var(--accent); margin: 0 0 18px; }
+.checklist-jump:hover:not(:disabled) { color: #fff; }
+.checklist-item:focus-visible { outline: 3px solid #b16a0b; outline-offset: 4px; border-radius: 12px; }
+.shift-actions { border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-top: 24px; min-width: 0; }
+.shift-actions > legend { padding: 0 8px; font-weight: 600; color: var(--ink); }
