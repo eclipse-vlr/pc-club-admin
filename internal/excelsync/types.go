@@ -35,8 +35,9 @@ type State struct {
 
 // Failure intentionally excludes provider response bodies and credential values.
 type Failure struct {
-	Code      string
-	Temporary bool
+	Code       string
+	Temporary  bool
+	HTTPStatus int
 }
 
 func (f *Failure) Error() string { return f.Code }

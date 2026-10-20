@@ -192,7 +192,7 @@ func (d *DriveClient) request(ctx context.Context, method, path string, body []b
 			}
 		}
 		// Error bodies can contain provider identities and URLs. Never propagate them.
-		return nil, nil, &Failure{Code: code, Temporary: temporary}
+		return nil, nil, &Failure{Code: code, Temporary: temporary, HTTPStatus: response.StatusCode}
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
