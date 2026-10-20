@@ -653,3 +653,20 @@ footer {
 .excel-status.is-pending p {
   color: #365b83;
 }
+
+.excel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 10px 8px 0;
+  padding: 10px 14px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.excel-link:hover { background: #fff; }
+.excel-status .excel-meta { font-size: 13px; font-weight: 400; }
+.excel-refresh { background: #fff; color: var(--accent); }
+.excel-refresh:hover:not(:disabled) { color: #fff; }

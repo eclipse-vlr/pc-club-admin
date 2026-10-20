@@ -333,7 +333,7 @@ func TestOpeningChecklistBoundary(t *testing.T) {
 	if err := access.Bootstrap(ctx, auth.UserInput{Name: "Тестовый управляющий", Login: "manager", Password: password, Roles: []string{"manager"}}); err != nil {
 		t.Fatal(err)
 	}
-	c := config.Config{Environment: "test", Origin: "http://127.0.0.1:8080", Timezone: "Europe/Moscow", CashPolicyStatus: "unverified"}
+	c := config.Config{Environment: "test", Origin: "http://127.0.0.1:8080", Timezone: "Europe/Moscow", CashPolicyStatus: "unverified", ExcelSyncMode: "test", ExcelFileID: "synthetic-test-copy"}
 	work := shifts.New(postgres.ShiftRepository{Pool: pool}, access, c.Timezone, false)
 	handler := httpapi.NewWithShifts(c, func(ctx context.Context) error { return postgres.CheckSchema(ctx, pool, c.Timezone) }, slog.New(slog.NewTextHandler(io.Discard, nil)), access, work)
 	newBrowser := func(source string) *browser {
@@ -351,6 +351,25 @@ func TestOpeningChecklistBoundary(t *testing.T) {
 	input["opening_cash_kopecks"] = 0
 	draft := manager.call("POST", "/api/v1/shifts/bootstrap", input, 201)
 	shiftID := draft["id"].(string)
+	syncPath := "/api/v1/shifts/" + shiftID + "/excel-sync"
+	anonymous := newBrowser("192.0.2.62")
+	noSession := anonymous.call("GET", syncPath, nil, 401)
+	if body, _ := json.Marshal(noSession); bytes.Contains(body, []byte(c.ExcelFileID)) {
+		t.Fatal("anonymous request exposed Drive target")
+	}
+	syncStatus := manager.call("GET", syncPath, nil, 200)
+	if syncStatus["file_url"] != "https://drive.google.com/file/d/synthetic-test-copy/view" || syncStatus["timezone"] != c.Timezone || syncStatus["sheet_name"] != "Чек-лист приёма и сдачи смены" {
+		t.Fatalf("manager Excel metadata = %v, want configured target and club timezone", syncStatus)
+	}
+	// Disabling delivery must not advertise a target even when the ID remains configured.
+	disabled := c
+	disabled.ExcelSyncMode = "disabled"
+	readOnly := *manager
+	readOnly.h = httpapi.NewWithShifts(disabled, func(context.Context) error { return nil }, slog.New(slog.NewTextHandler(io.Discard, nil)), access, work)
+	if _, exists := readOnly.call("GET", syncPath, nil, 200)["file_url"]; exists {
+		t.Fatal("disabled integration exposed a target link")
+	}
+
 	if draft["status"] != "opening" || draft["actual_start_at"] != nil {
 		t.Fatal("draft assigned responsibility")
 	}
@@ -388,7 +407,10 @@ func TestOpeningChecklistBoundary(t *testing.T) {
 	club.call("POST", "/api/v1/devices/register", map[string]any{"code": code, "label": "Тестовый браузер"}, 204)
 	club.call("POST", "/api/v1/auth/pin-login", map[string]any{"user_id": other["id"], "pin": "654321"}, 200)
 	club.call("GET", "/api/v1/shifts/"+shiftID, nil, 404)
-	club.call("GET", "/api/v1/shifts/"+shiftID+"/excel-sync", nil, 404)
+	denied := club.call("GET", syncPath, nil, 404)
+	if body, _ := json.Marshal(denied); bytes.Contains(body, []byte(c.ExcelFileID)) {
+		t.Fatal("other administrator saw Drive target")
+	}
 	club.call("PATCH", "/api/v1/shifts/"+shiftID+"/checklist/accept_d", map[string]any{"answer": "yes", "version": 1}, 403)
 	club.call("POST", "/api/v1/auth/pin-login", map[string]any{"user_id": owner, "pin": "123456"}, 200)
 	club.call("GET", "/api/v1/shifts/"+shiftID+"/excel-sync", nil, 200)
