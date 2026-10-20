@@ -85,3 +85,38 @@ func TestFrontendAndAPIBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestFrontendConfinesPublicFiles(t *testing.T) {
+	public := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(outside, []byte("private-file-must-not-leak"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(public, "assets", ".private"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{"assets/ok.js", "assets/.private/config.json", "assets/.env"} {
+		if err := os.WriteFile(filepath.Join(public, file), []byte("fixture"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(outside, filepath.Join(public, "leak.txt")); err != nil {
+		t.Fatal(err)
+	}
+	handler := frontend(public)
+	for _, tc := range []struct {
+		path string
+		want int
+	}{
+		{"/assets/ok.js", 200}, {"/assets/", 404}, {"/assets/.env", 404},
+		{"/assets/.private/config.json", 404}, {"/leak.txt", 404},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			if response.Code != tc.want || strings.Contains(response.Body.String(), "private-file-must-not-leak") {
+				t.Errorf("frontend(%q) = status %d, want %d without private content", tc.path, response.Code, tc.want)
+			}
+		})
+	}
+}

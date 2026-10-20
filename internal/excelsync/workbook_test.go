@@ -333,3 +333,35 @@ func TestWorkbookRejectsDuplicateArchiveEntries(t *testing.T) {
 		t.Fatalf("unexpected result: %v", err)
 	}
 }
+
+func TestArchiveLimitsImplicitCoordinates(t *testing.T) {
+	for _, tc := range []struct{ name, grid string }{
+		{"implicit rows", strings.Repeat("<row><c><v>1</v></c></row>", maxRows+1)},
+		{"implicit columns", "<row>" + strings.Repeat("<c><v>1</v></c>", 101) + "</row>"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buffer bytes.Buffer
+			writer := zip.NewWriter(&buffer)
+			for name, content := range map[string]string{
+				"xl/workbook.xml":            `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="` + Sheet + `" r:id="rId1"/></sheets></workbook>`,
+				"xl/_rels/workbook.xml.rels": `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
+				"xl/worksheets/sheet1.xml":   "<worksheet><sheetData>" + tc.grid + "</sheetData></worksheet>",
+			} {
+				entry, err := writer.Create(name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := entry.Write([]byte(content)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+			err := checkArchive(buffer.Bytes())
+			if err == nil || Code(err) != "EXCEL_ROW_LIMIT" {
+				t.Errorf("checkArchive(%s) = %v, want EXCEL_ROW_LIMIT", tc.name, err)
+			}
+		})
+	}
+}

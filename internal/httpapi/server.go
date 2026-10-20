@@ -98,8 +98,6 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func frontend(dir string) http.Handler {
-	root := os.DirFS(dir)
-	files := http.FileServer(http.FS(root))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" && r.Method != "HEAD" {
 			w.WriteHeader(405)
@@ -109,14 +107,30 @@ func frontend(dir string) http.Handler {
 		if name == "." || name == "" {
 			name = "index.html"
 		}
-		if !fs.ValidPath(name) || strings.HasPrefix(name, ".") {
+		if !fs.ValidPath(name) {
 			http.NotFound(w, r)
 			return
 		}
-		if _, err := fs.Stat(root, name); err != nil {
+		// Reject hidden paths at every depth, directories and symlinks escaping
+		// the configured public tree. os.DirFS alone follows external symlinks.
+		for _, part := range strings.Split(name, "/") {
+			if strings.HasPrefix(part, ".") {
+				http.NotFound(w, r)
+				return
+			}
+		}
+		root, err := os.OpenRoot(dir)
+		if err != nil {
 			http.NotFound(w, r)
 			return
 		}
-		files.ServeHTTP(w, r)
+		defer func() { _ = root.Close() }()
+		public := root.FS()
+		info, err := fs.Stat(public, name)
+		if err != nil || !info.Mode().IsRegular() {
+			http.NotFound(w, r)
+			return
+		}
+		http.FileServer(http.FS(public)).ServeHTTP(w, r)
 	})
 }
