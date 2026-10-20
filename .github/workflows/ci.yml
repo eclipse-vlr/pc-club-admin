@@ -9,10 +9,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Windows PowerShell 5.1 launcher checks (no application)
         shell: powershell
-        run: .\scripts\test-demo.ps1
+        run: |
+          .\scripts\test-demo.ps1
+          .\scripts\test-update.ps1
       - name: PowerShell 7 launcher checks (no application)
         shell: pwsh
-        run: .\scripts\test-demo.ps1
+        run: |
+          .\scripts\test-demo.ps1
+          .\scripts\test-update.ps1
   foundation:
     runs-on: ubuntu-latest
     services:
