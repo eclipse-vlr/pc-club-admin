@@ -12,16 +12,8 @@ import (
 // ProbeUpload writes identical bytes as a new revision of a disposable copy.
 // It proves conditional upload, not queue recovery or checklist delivery.
 func (d *DriveClient) ProbeUpload(ctx context.Context) error {
-	body, _, err := d.request(ctx, "GET", "/drive/v2/files/"+d.fileID+"?fields=id,title&supportsAllDrives=true", nil, nil, 64<<10)
-	if err != nil {
+	if err := d.checkProbeCopy(ctx); err != nil {
 		return err
-	}
-	var identity struct {
-		ID    string `json:"id"`
-		Title string `json:"title"`
-	}
-	if json.Unmarshal(body, &identity) != nil || identity.ID != d.fileID || identity.Title != "PC Club Admin — проверка Drive.xlsx" {
-		return fail("EXCEL_PROBE_COPY_REQUIRED")
 	}
 	if err := d.Check(ctx); err != nil {
 		return err
@@ -51,7 +43,7 @@ func (d *DriveClient) ProbeUpload(ctx context.Context) error {
 		return fail("EXCEL_PRECONDITION_UNCONFIRMED")
 	}
 	// Keep the original token: any intervening edit must reject the positive write.
-	body, _, err = d.request(ctx, "PUT", path, input, map[string]string{"If-Match": etag, "Content-Type": MIME}, 64<<10)
+	body, _, err := d.request(ctx, "PUT", path, input, map[string]string{"If-Match": etag, "Content-Type": MIME}, 64<<10)
 	if err != nil {
 		return err
 	}
@@ -68,6 +60,21 @@ func (d *DriveClient) ProbeUpload(ctx context.Context) error {
 	}
 	if after.MD5 != metadata.MD5 {
 		return fail("EXCEL_REMOTE_CONFLICT")
+	}
+	return nil
+}
+
+func (d *DriveClient) checkProbeCopy(ctx context.Context) error {
+	body, _, err := d.request(ctx, "GET", "/drive/v2/files/"+d.fileID+"?fields=id,title&supportsAllDrives=true", nil, nil, 64<<10)
+	if err != nil {
+		return err
+	}
+	var identity struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	}
+	if json.Unmarshal(body, &identity) != nil || identity.ID != d.fileID || identity.Title != "PC Club Admin — проверка Drive.xlsx" {
+		return fail("EXCEL_PROBE_COPY_REQUIRED")
 	}
 	return nil
 }

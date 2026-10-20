@@ -15,6 +15,7 @@ func main() {
 	credentials := flag.String("credentials", os.Getenv("DRIVE_EXCEL_CREDENTIALS_FILE"), "local path to the service account JSON; never the key contents")
 	fileID := flag.String("file-id", os.Getenv("DRIVE_EXCEL_FILE_ID"), "ID of the test XLSX copy")
 	confirm := flag.String("confirm-copy-id", "", "repeat the disposable copy ID to authorize a new revision")
+	delivery := flag.Bool("delivery", false, "deliver a synthetic checklist twice instead of testing conditional upload")
 	flag.Parse()
 	if flag.NArg() != 0 || *confirm != *fileID || (*credentials) == "" || (*fileID) == "" || os.Getenv("APP_ENV") != "test" {
 		fmt.Fprintln(os.Stderr, "Укажите -credentials, -file-id и совпадающий -confirm-copy-id одноразовой копии; разрешён только APP_ENV=test.")
@@ -25,11 +26,20 @@ func main() {
 	client, err := excelsync.NewDriveClient(ctx, *credentials, *fileID)
 	if err == nil {
 		defer client.Close()
-		err = client.ProbeUpload(ctx)
+		if *delivery {
+			err = client.ProbeDelivery(ctx)
+		} else {
+			err = client.ProbeUpload(ctx)
+		}
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Проверка Drive не пройдена:", excelsync.Code(err))
 		os.Exit(1)
+	}
+	if *delivery {
+		fmt.Println("Тестовая строка найдена в единственном экземпляре. Повторная доставка не изменила содержимое и ревизию файла.")
+		fmt.Println("Синхронизация выключена. Аварийный перезапуск процесса и восстановление очереди этой командой не проверяются.")
+		return
 	}
 	fmt.Println("Drive отклонил неверный ETag ответом HTTP 412 и принял актуальный ETag. Создана ревизия с тем же содержимым копии.")
 	fmt.Println("Синхронизация выключена. Повтор доставки после сбоя и отсутствие дубликатов этой командой не проверяются.")
