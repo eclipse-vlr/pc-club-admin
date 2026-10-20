@@ -94,20 +94,20 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
         <label>Первоначальный пересчёт · рубли<input name="cash" inputMode="numeric" required /></label>
         <p>Ноль нужно ввести явно. Это исходная сумма управляющего, ещё не принятый сотрудником остаток.</p>
         <label>Основание первоначальной суммы<textarea name="reason" required maxLength={4000} /></label>
-        <button disabled={busy}>Создать opening-черновик</button>
+        <button disabled={busy}>Создать черновик смены</button>
       </form>}
     </> : <>
-      <p>{shift.business_date} · {shift.kind === 'night' ? 'Ночная 21:00–09:00' : 'Дневная 09:00–21:00'} · {shift.status === 'opening' ? 'Черновик приёма' : shift.status === 'active' ? 'Активная смена' : shift.status==='handover_pending'?'Ожидает приёма · ответственность сохраняется':'Изменения недоступны'} · Шаблон {shift.template_version}</p>
+      <div className="shift-overview"><div><strong>{shift.business_date}</strong><p>{shift.kind === 'night' ? 'Ночная 21:00–09:00' : 'Дневная 09:00–21:00'}</p><p>Ответственный: {users.find(user => user.id === shift.owner_id)?.display_name ?? (shift.owner_id === actor ? identity.user.display_name : 'Назначенный сотрудник')}</p></div><span className="shift-state">{shift.status === 'opening' ? 'Черновик приёма' : shift.status === 'active' ? 'Активная смена' : shift.status==='handover_pending'?'Ожидает приёма · ответственность сохраняется':'Изменения недоступны'}</span></div>
       <ExcelSyncPanel key={shift.id} shiftID={shift.id} version={shift.version} enabled={excelSyncEnabled} />
       {!editable && <p>Просмотр без права изменения. Ответы заполняет назначенный администратор после личного PIN-входа.</p>}
-      {(['acceptance', 'closing'] as const).map(phase => <div key={phase}>
+      {ready && <div className="progress-grid" aria-label="Сохранённый прогресс чек-листов">{(['acceptance', 'closing'] as const).map(phase => <div className="progress-card" key={phase}><h3>{phase === 'acceptance' ? 'Приём смены' : 'Сдача смены'}<span>{ready[phase].completed} / {ready[phase].total}</span></h3><progress max={ready[phase].total || 1} value={ready[phase].completed} aria-label={phase === 'acceptance' ? 'Прогресс приёма' : 'Прогресс сдачи'} /><p>{ready[phase].blockers.length ? `Причин, требующих внимания: ${ready[phase].blockers.length}` : 'Обязательные пункты заполнены'}</p></div>)}</div>}
+      <aside className="readiness-status">{ready ? ready.blockers.length ? <details><summary>Что осталось проверить: {ready.blockers.length}</summary><ul>{ready.blockers.map((blocker, index) => <li key={blocker.code + ':' + index}>{blocker.message}</li>)}</ul></details> : <p>По сохранённым данным блокирующих причин нет. Для ответственного действия потребуется личное подтверждение.</p> : <p>Проверка готовности ещё не получена.</p>}</aside>
+      {(['acceptance', 'closing'] as const).map(phase => <div className="checklist-phase" key={phase}>
         <h3>{phase === 'acceptance' ? 'Приём' : 'Сдача'}: {ready ? `${ready[phase].completed} из ${ready[phase].total}` : 'Проверяем…'}</h3>
-        {shift.checklist.filter(entry => entry.phase === phase).map(entry => <EntryEditor key={generation + ':' + entry.code + ':' + entry.version} entry={entry} disabled={busy || !editable || (phase === 'acceptance' ? shift.status !== 'opening' : shift.status !== 'active')} onSave={data => saveEntry(entry, data)} />)}
+        <div className="checklist-grid">{shift.checklist.filter(entry => entry.phase === phase).map(entry => <EntryEditor key={generation + ':' + entry.code + ':' + entry.version} entry={entry} disabled={busy || !editable || (phase === 'acceptance' ? shift.status !== 'opening' : shift.status !== 'active')} onSave={data => saveEntry(entry, data)} />)}</div>
       </div>)}
       {!(shift.status==='opening'&&shift.handover_parent_id)&&<CashPanel key={"cash:" + generation + ":" + shift.id + ":" + shift.version} identity={identity} shift={shift} readyToActivate={ready?.can_activate === true} refresh={load} />}
       <HandoverPanel key={"handover:"+generation+":"+shift.id+":"+shift.version} identity={identity} shift={shift} users={users} canPrepare={ready?.can_prepare_handover===true} refresh={load} onSessionEnd={onSessionEnd}/>
-      <h3>Блокирующие причины</h3>
-      {ready ? <ul>{ready.blockers.map((blocker, index) => <li key={blocker.code + ':' + index}>{blocker.message}</li>)}</ul> : <p>Проверка ещё не получена.</p>}
       <h3>Замечания</h3>
       {shift.notes.length ? <ul>{shift.notes.map(note => <li key={note.id}><strong>{note.category === 'equipment' ? 'Неисправность' : note.category === 'conflict' ? 'Конфликт' : 'Заметка'}</strong> {note.object_label}: {note.text}</li>)}</ul> : <p>Замечаний пока нет. Это не означает, что оборудование уже проверено.</p>}
       {editable && <form onSubmit={event => void saveNote(event)}>
@@ -133,7 +133,7 @@ function EntryEditor({ entry, disabled, onSave }: { entry: Entry; disabled: bool
     <fieldset disabled={disabled || uncertain}>
       <legend>{entry.label}</legend>
       {entry.help_text && <p>{entry.help_text}</p>}
-      <label>Ответ<select name="answer" defaultValue={entry.answer}><option value="unanswered">Не отвечено</option><option value="yes">Да</option><option value="no">Нет</option></select></label>
+      <label>Ответ<select name="answer" defaultValue={entry.answer}><option value="unanswered">Не отвечено</option><option value="yes">Да</option><option value="no">{entry.code === 'conflicts_recorded' ? 'Нет конфликтов' : 'Нет — пункт не выполнен'}</option></select></label>
       {entry.equipment_check && <label><input className="inline" name="issue" type="checkbox" defaultChecked={entry.equipment_issue} /> Обнаружена неисправность — требуется связанная заметка</label>}
       <label>Комментарий<textarea name="comment" maxLength={4000} defaultValue={entry.comment} /></label>
       <button>Сохранить ответ</button><span role="status">{state}</span>
