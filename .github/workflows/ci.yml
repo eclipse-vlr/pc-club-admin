@@ -51,7 +51,8 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
       - run: go test -race ./...
-      - run: go test -race -tags=integration ./internal/storage/postgres ./internal/httpapi -count=1
+      - name: PostgreSQL integration and Excel relay crash recovery
+        run: go test -race -tags=integration ./internal/storage/postgres ./internal/httpapi ./internal/excelsync -count=1
       - name: Isolated PostgreSQL backup and restore drill
         run: node scripts/test-backup.mjs
       - run: go run ./cmd/migrate up
