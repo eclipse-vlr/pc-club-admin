@@ -3851,7 +3851,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExcelSyncState"
+                  "$ref": "#/components/schemas/ExcelSyncStatus"
                 }
               }
             }
@@ -3937,7 +3937,8 @@
               "format": "uuid"
             }
           }
-        ]
+        ],
+        "description": "Проверяет права просмотра конкретной смены. В test-mode с подключённым Drive возвращает ссылку на настроенную XLSX-копию и имя листа. Ссылка не меняет права Google Drive. Время отправки относится к подтверждённой версии; сравнивайте synced_version с requested_version и текущей версией смены."
       }
     },
     "/api/v1/shifts/{id}/handovers": {
@@ -6989,6 +6990,35 @@
             "type": "string"
           }
         }
+      },
+      "ExcelSyncStatus": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ExcelSyncState"
+          },
+          {
+            "type": "object",
+            "required": [
+              "timezone"
+            ],
+            "properties": {
+              "file_url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Каноническая ссылка https://drive.google.com/file/d/<ID>/view; отсутствует при отключённой синхронизации или вне test-mode."
+              },
+              "sheet_name": {
+                "type": "string",
+                "description": "Имя листа чек-листа; возвращается вместе со ссылкой."
+              },
+              "timezone": {
+                "type": "string",
+                "description": "Часовой пояс клуба (IANA), используемый для отображения last_success_at.",
+                "example": "Europe/Moscow"
+              }
+            }
+          }
+        ]
       },
       "Handover": {
         "type": "object",

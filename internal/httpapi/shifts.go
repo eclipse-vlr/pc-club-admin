@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"pc-club-admin/internal/config"
+	"pc-club-admin/internal/excelsync"
 	"pc-club-admin/internal/shifts"
 )
 
@@ -60,7 +61,20 @@ func shiftRoutes(mux *http.ServeMux, c config.Config, s *shifts.Service) {
 			a.failure(w, err)
 			return
 		}
-		writeJSON(w, 200, shift.ExcelSync)
+		result := struct {
+			excelsync.State
+			FileURL   string `json:"file_url,omitempty"`
+			SheetName string `json:"sheet_name,omitempty"`
+			Timezone  string `json:"timezone"`
+		}{State: shift.ExcelSync, Timezone: c.Timezone}
+		// Return the target only after the normal per-shift authorization above.
+		if c.Environment == "test" && c.ExcelSyncMode == "test" {
+			result.FileURL = excelsync.FileURL(c.ExcelFileID)
+			if result.FileURL != "" {
+				result.SheetName = excelsync.Sheet
+			}
+		}
+		writeJSON(w, 200, result)
 	})
 	mux.HandleFunc("PATCH /api/v1/shifts/{id}/checklist/{code}", a.mutate(func(w http.ResponseWriter, r *http.Request) {
 		var in shifts.AnswerInput

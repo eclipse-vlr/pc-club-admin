@@ -66,6 +66,10 @@ jobs:
         working-directory: web
       - run: npm run build
         working-directory: web
+      - name: Excel status UI with intercepted API (no Google requests)
+        env:
+          PC_CLUB_CHROMIUM: /usr/bin/google-chrome
+        run: node web/e2e/excel-status.mjs
       - name: Build deployment image and validate isolated runtime
         run: |
           docker build -t pc-club-admin:local .

@@ -21,6 +21,14 @@ import (
 
 var fileIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{10,200}$`)
 
+// FileURL links to the existing workbook without granting access or exposing credentials.
+func FileURL(fileID string) string {
+	if !fileIDPattern.MatchString(fileID) {
+		return ""
+	}
+	return "https://drive.google.com/file/d/" + fileID + "/view"
+}
+
 type DriveClient struct {
 	client       *http.Client
 	transport    *http.Transport
