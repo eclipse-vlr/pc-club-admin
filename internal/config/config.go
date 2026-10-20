@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -25,6 +24,15 @@ type Config struct {
 	ExcelCredentialsFile string
 }
 
+// ValidationError identifies a setting without retaining its value.
+type ValidationError struct {
+	Field   string
+	message string
+}
+
+func (e *ValidationError) Error() string  { return e.message }
+func invalid(field, message string) error { return &ValidationError{Field: field, message: message} }
+
 func Load() (Config, error) { return Parse(os.Getenv) }
 
 func Parse(get func(string) string) (Config, error) {
@@ -41,43 +49,43 @@ func Parse(get func(string) string) (Config, error) {
 	c.ExcelFileID = get("DRIVE_EXCEL_FILE_ID")
 	c.ExcelCredentialsFile = get("DRIVE_EXCEL_CREDENTIALS_FILE")
 	if c.ExcelSyncMode != "disabled" && c.ExcelSyncMode != "test" {
-		return Config{}, fmt.Errorf("DRIVE_EXCEL_SYNC must be disabled or test")
+		return Config{}, invalid("DRIVE_EXCEL_SYNC", "DRIVE_EXCEL_SYNC must be disabled or test")
 	}
 	if c.ExcelSyncMode == "test" {
 		if c.Environment != "test" || len(c.ExcelFileID) < 10 || len(c.ExcelFileID) > 200 || c.ExcelCredentialsFile == "" {
-			return Config{}, fmt.Errorf("excel synchronization requires test mode, file ID and server credential path")
+			return Config{}, invalid("DRIVE_EXCEL_SYNC", "excel synchronization requires test mode, file ID and server credential path")
 		}
 		for _, ch := range c.ExcelFileID {
 			if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-", ch) {
-				return Config{}, fmt.Errorf("invalid DRIVE_EXCEL_FILE_ID")
+				return Config{}, invalid("DRIVE_EXCEL_FILE_ID", "invalid DRIVE_EXCEL_FILE_ID")
 			}
 		}
 	}
 	if len(c.PINPepper) < 32 {
-		return Config{}, fmt.Errorf("PIN_PEPPER requires at least 32 characters")
+		return Config{}, invalid("PIN_PEPPER", "PIN_PEPPER requires at least 32 characters")
 	}
 	origin, err := url.Parse(c.Origin)
 	if err != nil || origin.Host == "" || (origin.Scheme != "http" && origin.Scheme != "https") || origin.User != nil || origin.RawQuery != "" || origin.Fragment != "" || origin.Path != "" {
-		return Config{}, fmt.Errorf("invalid APP_ORIGIN")
+		return Config{}, invalid("APP_ORIGIN", "invalid APP_ORIGIN")
 	}
 	if c.Environment == "production" && !strings.HasPrefix(c.Origin, "https://") {
-		return Config{}, fmt.Errorf("production requires HTTPS APP_ORIGIN")
+		return Config{}, invalid("APP_ORIGIN", "production requires HTTPS APP_ORIGIN")
 	}
 	if c.Environment != "test" && c.Environment != "production" {
-		return Config{}, fmt.Errorf("APP_ENV must be test or production")
+		return Config{}, invalid("APP_ENV", "APP_ENV must be test or production")
 	}
 	if c.DatabaseURL == "" {
-		return Config{}, fmt.Errorf("DATABASE_URL is required")
+		return Config{}, invalid("DATABASE_URL", "DATABASE_URL is required")
 	}
 	if _, _, err := net.SplitHostPort(c.HTTPAddr); err != nil {
-		return Config{}, fmt.Errorf("invalid HTTP_ADDR")
+		return Config{}, invalid("HTTP_ADDR", "invalid HTTP_ADDR")
 	}
 	if _, err := time.LoadLocation(c.Timezone); err != nil {
-		return Config{}, fmt.Errorf("invalid CLUB_TIMEZONE")
+		return Config{}, invalid("CLUB_TIMEZONE", "invalid CLUB_TIMEZONE")
 	}
 	// This release contains no verified cash policy. A config flag cannot certify one.
 	if c.CashPolicyStatus != "unverified" {
-		return Config{}, fmt.Errorf("only CASH_POLICY_STATUS=unverified is supported by this release")
+		return Config{}, invalid("CASH_POLICY_STATUS", "only CASH_POLICY_STATUS=unverified is supported by this release")
 	}
 	return c, nil
 }

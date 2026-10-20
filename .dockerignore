@@ -16,3 +16,6 @@ coverage*
 **/*_test.go
 web/e2e
 web/tests
+
+.demo.local.json
+.demo.local.json.*.tmp

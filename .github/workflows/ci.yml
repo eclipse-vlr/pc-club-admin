@@ -3,6 +3,16 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  windows-launcher:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Windows PowerShell 5.1 launcher checks (no application)
+        shell: powershell
+        run: .\scripts\test-demo.ps1
+      - name: PowerShell 7 launcher checks (no application)
+        shell: pwsh
+        run: .\scripts\test-demo.ps1
   foundation:
     runs-on: ubuntu-latest
     services:
