@@ -43,5 +43,6 @@ export function ExcelSyncPanel({shiftID,version,enabled}:{shiftID:string;version
     else if(state.last_success_at && state.synced_version>=Math.max(state.requested_version,version)) message='Сохранённые ответы отправлены в Excel.';
     else message='Обновление Excel ожидает отправки.';
   }
-  return <aside><h3>Автозаполнение Excel</h3><p role="status">{message}</p><p>В файл попадают только сохранённые ответы. Отправка в Excel не означает завершение приёма или передачи смены. Сейчас поддерживается тестовый чек-лист.</p></aside>;
+  const tone = !enabled ? 'is-disabled' : unavailable || state?.last_error_code ? 'is-warning' : state?.last_success_at && state.synced_version >= Math.max(state.requested_version, version) ? 'is-synced' : 'is-pending';
+  return <aside className={'excel-status ' + tone}><h3>Автозаполнение Excel</h3><p role="status">{message}</p><p>В файл попадают только сохранённые ответы. Отправка в Excel не означает завершение приёма или передачи смены. Сейчас поддерживается тестовый чек-лист.</p></aside>;
 }

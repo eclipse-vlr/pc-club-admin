@@ -1,6 +1,7 @@
-/* global document, window */
+/* global document, window, location */
 import process from 'node:process';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { chromium } from 'playwright-core';
 const url=process.env.PC_CLUB_E2E_URL;
 assert.ok(url?.startsWith('http://127.0.0.1:')||url?.startsWith('http://[::1]:'));
@@ -9,6 +10,7 @@ try{
  const remote=await browser.newContext({viewport:{width:390,height:844}});const manager=await remote.newPage();manager.setDefaultTimeout(15000);
  const errors=[];manager.on('pageerror',e=>errors.push(e.message));
  await manager.goto(url);
+ if(process.env.PC_CLUB_SCREENSHOT_DIR)await manager.screenshot({path:path.join(process.env.PC_CLUB_SCREENSHOT_DIR,'login-mobile.png')});
  await manager.getByRole('button',{name:'Управляющий · пароль',exact:true}).click();
  await manager.getByLabel('Логин управляющего',{exact:true}).fill('manager');
  await manager.getByLabel('Пароль',{exact:true}).fill(process.env.PC_CLUB_E2E_MANAGER_PASSWORD);
@@ -51,7 +53,7 @@ try{
  await page.getByRole('button',{name:'Зарегистрировать',exact:true}).click();
  await page.locator('select[name="user"]').waitFor();
  // Manager creates a night shift with explicit zero; admin must accept it personally.
- const opening=manager.locator('form').filter({has:manager.getByRole('button',{name:'Создать opening-черновик',exact:true})});
+ const opening=manager.locator('form').filter({has:manager.getByRole('button',{name:'Создать черновик смены',exact:true})});
  await opening.locator('select[name="owner"]').selectOption(owner);
  await opening.getByLabel('Дата начала в часовом поясе клуба',{exact:true}).fill('2026-10-19');
  await opening.locator('select[name="kind"]').selectOption('night');
@@ -95,7 +97,16 @@ try{
  const secondCreated=manager.waitForResponse(r=>r.url().endsWith('/users')&&r.request().method()==='POST'&&r.status()===201);
  await creating.getByRole('button',{name:'Создать сотрудника',exact:true}).click();
  assert.deepEqual((await (await secondCreated).json()).roles,['manager']);
+ const navigation=manager.getByRole('navigation',{name:'Разделы приложения',exact:true});
+ await navigation.getByRole('link',{name:'Текущая смена',exact:true}).click();
+ assert.equal(await manager.evaluate(()=>location.hash),'#current-shift');
  assert.ok(await manager.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'manager interface fits mobile width');
+ assert.equal(await page.getByRole('progressbar').count(),2,'saved acceptance and closing progress shown');
+ if(process.env.PC_CLUB_SCREENSHOT_DIR){
+  await manager.screenshot({path:path.join(process.env.PC_CLUB_SCREENSHOT_DIR,'manager-mobile.png')});
+  await page.evaluate(()=>window.scrollTo(0,0));
+  await page.screenshot({path:path.join(process.env.PC_CLUB_SCREENSHOT_DIR,'shift-desktop.png')});
+ }
  assert.equal(errors.length,0,'no page errors');
  await club.close();await remote.close();
 }finally{await browser.close();}

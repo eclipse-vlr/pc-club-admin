@@ -79,22 +79,24 @@ function App() {
   const actor = identity?.user.id ?? '';
 
   return <main>
-    <header><p className="brand">PC CLUB ADMIN</p><span>Этап 7 · Панель руководителя</span></header>
-    <h1>{identity ? identity.user.display_name : 'Вход в приложение'}</h1>
-    <section className="notice"><h2>{environment === 'production' ? 'Production: рабочие операции заблокированы' : environment === 'test' ? 'Тестовый режим' : 'Проверяем режим работы'} · Кассовая политика не подтверждена</h2><p>Доступны opening-черновик и чек-лист. Первый приём и касса доступны только с синтетическими данными. Передача требует двух личных входов и отдельного пересчёта принимающего. Production заблокирован до проверки денежной политики.</p></section>
+    <a className="skip-link" href="#workspace">К рабочему экрану</a>
+    <header className="app-header"><a className="brand" href="#workspace"><span className="brand-mark" aria-hidden="true">PC</span><span>CLUB ADMIN<small>Управление сменами</small></span></a><span className="mode-badge">{environment === 'test' ? 'Тестовый режим' : environment === 'production' ? 'Рабочие операции заблокированы' : 'Подключение…'}</span></header>
+    <div className="page-heading" id="workspace"><p className="eyebrow">{identity ? 'Рабочее пространство' : 'Компьютерный клуб'}</p>
+    <h1>{identity ? identity.user.display_name : 'Вход в приложение'}</h1><p className="page-description">{identity ? 'Смена, проверки и передача ответственности — в одном месте.' : 'Войдите в личную учётную запись, чтобы продолжить работу.'}</p></div>
+    <aside className="notice mode-notice"><strong>{environment === 'production' ? 'Рабочие операции заблокированы' : 'Демонстрационная версия'}</strong><p>Кассовая политика не подтверждена. Используйте только вымышленные тестовые данные.</p><details><summary>Правила работы в тестовом режиме</summary><p>Приём и передача требуют чек-листа, пересчёта кассы и личного PIN. Передача выполняется двумя сотрудниками на одном зарегистрированном браузере. Production заблокирован до проверки денежной политики.</p></details></aside>
     {message && <p className="error" role="alert">{message}</p>}
     {loading ? <p role="status">Проверяем сессию…</p> : identity ? <>
-      <section><h2>Личный вход подтверждён</h2><p>Роли: {identity.user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')}.</p>
+      <section className="identity-card"><h2>Личный вход подтверждён</h2><p>Роли: {identity.user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')}.</p>
         <p>{identity.device_trusted ? 'Браузер зарегистрирован в клубе.' : 'Удалённый вход. Доверие клубному браузеру не назначено.'}</p>
         <button disabled={busy} onClick={() => void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); })}>Выйти / сменить сотрудника</button>
       </section>
-      {identity.user.roles.includes('manager')&&<ManagerDashboard key={'dashboard:'+identity.user.id}/>}
-      {identity.user.roles.includes('manager')&&<ExportPanel key={'exports:'+identity.user.id} users={users}/>}
-      {identity.user.roles.includes('manager')&&<AuditPanel key={'audit:'+identity.user.id} users={users} timezone={clubTimezone}/>}
-      <HistoryPanel key={'history:'+identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} timezone={clubTimezone}/>
-      <ChecklistPanel key={identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} excelSyncEnabled={excelSyncEnabled} onSessionEnd={refresh} />
+      <nav className="workspace-nav" aria-label="Разделы приложения"><a href="#current-shift">Текущая смена</a><a href="#shift-history">История</a>{identity.user.roles.includes('manager') && <><a href="#club-overview">Обзор клуба</a><a href="#reports">Отчёты и аудит</a><a href="#team">Сотрудники и доступ</a></>}</nav>
+      <div id="current-shift"><ChecklistPanel key={identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} excelSyncEnabled={excelSyncEnabled} onSessionEnd={refresh} /></div>
+      {identity.user.roles.includes('manager')&&<div id="club-overview"><ManagerDashboard key={'dashboard:'+identity.user.id}/></div>}
+      <div id="shift-history"><HistoryPanel key={'history:'+identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} timezone={clubTimezone}/></div>
+      {identity.user.roles.includes('manager')&&<div id="reports"><ExportPanel key={'exports:'+identity.user.id} users={users}/><AuditPanel key={'audit:'+identity.user.id} users={users} timezone={clubTimezone}/></div>}
       {identity.user.roles.includes('manager') && <>
-        <section><h2>Сотрудники</h2><ul>{users.map(user => <li key={user.id}>{user.display_name} · {user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')} · {user.active ? 'активен' : 'отключён'}</li>)}</ul>
+        <section id="team"><h2>Сотрудники</h2><ul>{users.map(user => <li key={user.id}>{user.display_name} · {user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')} · {user.active ? 'активен' : 'отключён'}</li>)}</ul>
           <form onSubmit={event => submit(event, async data => {
             const role=text(data,'role');
             await api('/users', 'POST', { display_name: text(data, 'name'), roles: role==='both'?['admin','manager']:[role], ...(role!=='manager'?{pin:text(data,'pin')}:{}), ...(role!=='admin'?{manager_login:text(data,'login'),password:text(data,'password')}:{}) }, actor);
@@ -113,7 +115,7 @@ function App() {
           {enrollment && <p>Введите этот код в клубном браузере. Он используется один раз: <code className="code">{enrollment}</code><button onClick={() => setEnrollment('')}>Скрыть код</button></p>}
         </section>
       </>}
-    </> : <section>
+    </> : <section className="login-card">
       <nav aria-label="Способ входа"><button disabled={busy} aria-pressed={mode === 'admin'} onClick={() => setMode('admin')}>Администратор · PIN</button><button disabled={busy} aria-pressed={mode === 'manager'} onClick={() => setMode('manager')}>Управляющий · пароль</button></nav>
       {mode === 'admin' ? options.length ? <form onSubmit={event => submit(event, async data => { await api('/auth/pin-login', 'POST', { user_id: text(data, 'user'), pin: text(data, 'pin') }); })}>
         <label>Сотрудник<select name="user" required defaultValue=""><option value="" disabled>Выберите своё имя</option>{options.map(user => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
