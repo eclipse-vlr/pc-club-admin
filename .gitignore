@@ -12,3 +12,7 @@
 *.service-account.json
 
 /deploy/.env
+
+# Local demo target and credential path (never key contents).
+.demo.local.json
+.demo.local.json.*.tmp

@@ -2,7 +2,9 @@
 [CmdletBinding()]
 param(
     [string]$DriveFileId = '',
-    [string]$Credentials = ''
+    [string]$Credentials = '',
+    [switch]$SaveDriveSettings,
+    [switch]$WithoutDrive
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,20 +12,31 @@ Set-StrictMode -Version Latest
 $originalLocation = Get-Location
 try {
     Set-Location (Split-Path -Parent $PSScriptRoot)
+    . "$PSScriptRoot/demo-settings.ps1"
+    $settingsPath = Join-Path (Get-Location).Path '.demo.local.json'
+    if ($WithoutDrive -and ($DriveFileId -or $Credentials -or $SaveDriveSettings)) {
+        throw '-WithoutDrive cannot be combined with Drive arguments or -SaveDriveSettings.'
+    }
+    $drive = $null
+    if ($DriveFileId -or $Credentials) {
+        $drive = New-DemoDriveSettings -FileId $DriveFileId -CredentialsPath $Credentials
+    }
+    if ($SaveDriveSettings) {
+        if (-not $drive) { throw '-SaveDriveSettings requires explicit -DriveFileId and -Credentials.' }
+        Save-DemoDriveSettings -SettingsPath $settingsPath -Settings $drive
+        Write-Host 'Test Drive settings saved locally. No key contents copied. Application was not started.'
+        return
+    }
+    if (-not $WithoutDrive -and -not $drive) { $drive = Read-DemoDriveSettings -SettingsPath $settingsPath }
     if (-not (Test-Path -LiteralPath '.env' -PathType Leaf)) {
         throw 'Local .env is missing. Restore your existing configuration before starting.'
     }
     . "$PSScriptRoot/load-env.ps1"
     $env:APP_ENV = 'test'
-    # Drive requires explicit arguments on each launch; never inherit another target.
     $env:DRIVE_EXCEL_SYNC = 'disabled'
-    if ($DriveFileId -or $Credentials) {
-        if ($DriveFileId -notmatch '^[A-Za-z0-9_-]{10,200}$' -or
-            -not $Credentials -or -not (Test-Path -LiteralPath $Credentials -PathType Leaf)) {
-            throw 'Provide both a valid test copy -DriveFileId and an existing -Credentials JSON path.'
-        }
-        $env:DRIVE_EXCEL_FILE_ID = $DriveFileId
-        $env:DRIVE_EXCEL_CREDENTIALS_FILE = (Resolve-Path -LiteralPath $Credentials).Path
+    if ($drive) {
+        $env:DRIVE_EXCEL_FILE_ID = $drive.drive_file_id
+        $env:DRIVE_EXCEL_CREDENTIALS_FILE = $drive.credentials_file
         $env:DRIVE_EXCEL_SYNC = 'test'
     }
     if (-not $env:DATABASE_URL -or -not $env:PIN_PEPPER -or $env:PIN_PEPPER.Length -lt 32) {
