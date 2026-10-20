@@ -51,6 +51,7 @@ function App() {
       setUsers(await api<User[]>('/users'));
       setDevices(await api<typeof devices>('/devices'));
     } else { setUsers([]); setDevices([]); }
+    return me;
   }
   useEffect(() => {
     void refresh().catch(() => setMessage('Не удалось связаться с сервером. Обновите страницу.')).finally(() => setLoading(false));
@@ -91,7 +92,7 @@ function App() {
   return <main>
     <a className="skip-link" href="#workspace">К рабочему экрану</a>
     <header className="app-header"><a className="brand" href="#workspace"><span className="brand-mark" aria-hidden="true">PC</span><span>CLUB ADMIN<small>Управление сменами</small></span></a><span className="mode-badge">{environment === 'test' ? 'Тестовый режим' : environment === 'production' ? 'Рабочие операции заблокированы' : 'Подключение…'}</span></header>
-    <div className="page-heading" id="workspace"><p className="eyebrow">{identity ? 'Рабочее пространство' : 'Компьютерный клуб'}</p>
+    <div className="page-heading" id="workspace" tabIndex={-1}><p className="eyebrow">{identity ? 'Рабочее пространство' : 'Компьютерный клуб'}</p>
     <h1>{identity ? identity.user.display_name : 'Вход в приложение'}</h1><p className="page-description">{identity ? 'Смена, проверки и передача ответственности — в одном месте.' : 'Войдите в личную учётную запись, чтобы продолжить работу.'}</p></div>
     <aside className="notice mode-notice"><strong>{environment === 'production' ? 'Рабочие операции заблокированы' : 'Демонстрационная версия'}</strong><p>Кассовая политика не подтверждена. Используйте только вымышленные тестовые данные.</p><details><summary>Правила работы в тестовом режиме</summary><p>Приём и передача требуют чек-листа, пересчёта кассы и личного PIN. Передача выполняется двумя сотрудниками на одном зарегистрированном браузере. Production заблокирован до проверки денежной политики.</p></details></aside>
     {message && <p className="error" role="alert">{message}</p>}
@@ -117,7 +118,7 @@ function App() {
             <button disabled={busy}>Создать сотрудника</button>
           </form>
         </section>
-        <EmployeePanel key={identity.user.id} users={users} actor={actor} refresh={refresh}/>
+        <EmployeePanel key={identity.user.id} users={users} actor={actor} refresh={async () => { await refresh(); }}/>
         <section><h2>Доверенные браузеры</h2><ul>{devices.map(device => <li key={device.id}>{device.label} · {device.revoked ? 'доступ отозван' : `действует до ${new Date(device.expires_at).toLocaleDateString('ru-RU')}`} {!device.revoked && <button disabled={busy} onClick={() => void perform(async () => { await api('/devices/' + device.id + '/revoke', 'POST', {}, actor); })}>Отозвать доступ</button>}</li>)}</ul>
           <form onSubmit={event => submit(event, async data => { const result = await api<{ code: string }>('/devices/enrollment', 'POST', { password: text(data, 'password') }, actor); setEnrollment(result.code); })}>
             <h3>Выдать одноразовый код регистрации</h3><label>Повторите пароль управляющего<input name="password" type="password" maxLength={256} required autoComplete="current-password" /></label><button disabled={busy}>Создать код на 10 минут</button>

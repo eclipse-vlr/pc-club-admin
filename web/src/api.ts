@@ -3,7 +3,8 @@ export type User = { id: string; display_name: string; manager_login: string; ro
 export type Identity = { user: User; device_trusted: boolean; pin_session: boolean };
 export class APIError extends Error {
   code: string;
-  constructor(code: string, message: string) { super(message); this.code = code; }
+  status?: number;
+  constructor(code: string, message: string, status?: number) { super(message); this.code = code; this.status = status; }
 }
 export async function api<T>(path: string, method = 'GET', body?: unknown, actor = '', idempotencyKey?: string): Promise<T> {
   const controller = new AbortController();
@@ -14,8 +15,12 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, actor
     const headers: Record<string, string> = {};
     if (method !== 'GET') {
       const response = await fetch('/api/v1/auth/csrf', { cache: 'no-store', signal });
-      if (!response.ok) throw new APIError('SERVICE_UNAVAILABLE', 'Сервер недоступен');
-      const token = await response.json() as { csrf_token: string };
+      if (!response.ok) throw new APIError('SERVICE_UNAVAILABLE', 'Не удалось проверить запрос. Перечитайте данные.', response.status);
+      let token: { csrf_token: string };
+      try {
+        token = await response.json() as { csrf_token: string };
+        if (!token || typeof token.csrf_token !== 'string' || !token.csrf_token) throw new Error('invalid csrf response');
+      } catch { throw new APIError('INVALID_RESPONSE', 'Не удалось проверить запрос: ответ сервера не распознан. Перечитайте данные.'); }
       headers['X-CSRF-Token'] = token.csrf_token;
       headers['X-Actor-ID'] = actor;
       headers['Content-Type'] = 'application/json';
@@ -23,14 +28,18 @@ export async function api<T>(path: string, method = 'GET', body?: unknown, actor
     }
     const response = await fetch('/api/v1' + path, { method, headers, body: body === undefined ? undefined : stringifyExact(body), cache: 'no-store', signal });
     if (response.status === 204) return undefined as T;
-    const result: unknown = parseExactJSON(await response.text());
+    const content = await response.text();
+    let result: unknown;
+    try { result = parseExactJSON(content); }
+    catch { throw new APIError('INVALID_RESPONSE', 'Не удалось прочитать ответ сервера. Перечитайте данные перед повтором.'); }
     if (!response.ok) {
-      const error = result as { error?: { code?: string; message?: string } };
-      throw new APIError(error.error?.code ?? 'REQUEST_FAILED', error.error?.message ?? 'Действие не выполнено');
+      const error = result as { error?: { code?: string; message?: string } } | null;
+      throw new APIError(error?.error?.code ?? 'REQUEST_FAILED', error?.error?.message ?? 'Действие не выполнено', response.status);
     }
     return result as T;
   } catch (error) {
     if (signal.aborted) throw new APIError('REQUEST_TIMEOUT', 'Сервер не ответил вовремя. Результат действия неизвестен — перечитайте данные перед повтором.');
+    if (error instanceof TypeError) throw new APIError('NETWORK_ERROR', 'Связь с сервером прервалась. Перечитайте данные перед повтором.');
     throw error;
   } finally {
     clearTimeout(deadline);

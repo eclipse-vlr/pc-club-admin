@@ -40,10 +40,23 @@ try{
  await login(process.env.PC_CLUB_E2E_OWNER,'123456','Сдающий E2E');
  assert.equal(await page.getByRole('region',{name:'Панель руководителя',exact:true}).count(),0);
  const prepare=page.locator('form').filter({has:page.getByRole('button',{name:'Подготовить передачу и выйти',exact:true})});
+ // The preparation commits and revokes the sender session, but its response is lost.
+ let preparationCalls=0;
+ await page.route('**/api/v1/shifts/*/handovers',async route=>{
+  preparationCalls++;
+  const response=await route.fetch();assert.equal(response.status(),201);
+  await route.abort('connectionreset');
+ });
  await prepare.locator('select[name="receiver"]').selectOption(process.env.PC_CLUB_E2E_RECEIVER);
  await prepare.getByLabel('Мой личный PIN',{exact:true}).fill('123456');
  await prepare.getByRole('button').click();
+ const transferPanel=page.getByRole('region',{name:'Передача смены',exact:true});
+ await transferPanel.getByRole('alert').filter({hasText:'Результат действия неизвестен'}).waitFor();
+ assert.ok(await prepare.getByRole('button').isDisabled());
+ await transferPanel.getByRole('button',{name:'Проверить сессию и перечитать передачу',exact:true}).click();
  await page.getByRole('heading',{level:1,name:'Вход в приложение'}).waitFor();
+ await page.unroute('**/api/v1/shifts/*/handovers');
+ assert.equal(preparationCalls,1,'unknown preparation must not be resubmitted');
  assert.equal((await context.request.get(url+'/api/v1/auth/me')).status(),401,'sender session must end');
  await refreshDashboard();
  await dashboard.getByText('Принимающий: Принимающий E2E.',{exact:false}).waitFor();
@@ -71,21 +84,38 @@ try{
  await acknowledgement.check();
  await page.getByRole('button',{name:'Сохранить ознакомление',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('input[name="notes"]')?.disabled===true);
- await page.getByLabel('Мой личный PIN',{exact:true}).fill('654321');
- await page.getByRole('button',{name:'Лично принять смену',exact:true}).click();
- await page.getByRole('alert').filter({hasText:'Ваш пересчёт не совпадает'}).waitFor();
- await page.getByRole('button',{name:'Проверить сессию и перечитать передачу',exact:true}).click();
- await page.getByRole('alert').waitFor({state:'hidden'});
- await page.getByLabel('Мой пересчёт наличных · рубли',{exact:true}).waitFor();
+ const acceptance=page.getByRole('button',{name:'Лично принять смену',exact:true});
+ await page.getByText('Ваш пересчёт не совпадает',{exact:false}).waitFor();
+ assert.ok(await acceptance.isDisabled(),'one kopeck blocks the UI; server rejection is covered by integration tests');
  await count('15000');
+ // Failure before the request reaches the server must preserve the pending transfer.
+ let acceptCalls=0;
+ await page.route('**/api/v1/handovers/*/accept',async route=>{acceptCalls++;await route.abort('connectionreset');});
+ await page.getByLabel('Мой личный PIN',{exact:true}).fill('654321');
+ await acceptance.click();
+ await transferPanel.getByRole('alert').filter({hasText:'Результат действия неизвестен'}).waitFor();
+ assert.ok(await acceptance.isDisabled());
+ await page.unroute('**/api/v1/handovers/*/accept');
+ await transferPanel.getByRole('button',{name:'Проверить сессию и перечитать передачу',exact:true}).click();
+ await transferPanel.getByRole('alert').waitFor({state:'hidden'});
+ await page.getByText('Редакция 1 · Ожидает приёма',{exact:true}).waitFor();
+ assert.ok(await acceptance.isEnabled());
+ await refreshDashboard();
+ await dashboard.getByRole('heading',{name:'Ответственный: Сдающий E2E',exact:true}).waitFor();
+ assert.equal(acceptCalls,1);
  // Simulate a lost success response. Reload reconciles the committed operation.
- await page.route('**/api/v1/handovers/*/accept',async route=>{await route.fetch();await route.abort('connectionreset');});
+ await page.route('**/api/v1/handovers/*/accept',async route=>{acceptCalls++;const response=await route.fetch();assert.equal(response.status(),200);await route.abort('connectionreset');});
  await page.getByLabel('Мой личный PIN',{exact:true}).fill('654321');
  await page.getByRole('button',{name:'Лично принять смену',exact:true}).click();
- await page.getByRole('alert').waitFor();
+ await transferPanel.getByRole('alert').filter({hasText:'Результат действия неизвестен'}).waitFor();
+ assert.ok(await acceptance.isDisabled());
  await page.unroute('**/api/v1/handovers/*/accept');
+ await transferPanel.getByRole('button',{name:'Проверить сессию и перечитать передачу',exact:true}).click();
+ await page.getByRole('region',{name:'Текущая смена',exact:true}).getByText('Активная смена',{exact:false}).waitFor();
  await page.reload();
  await page.getByRole('region',{name:'Текущая смена',exact:true}).getByText('Активная смена',{exact:false}).waitFor();
+ assert.equal(acceptCalls,2,'one failed request and one committed request, with no automatic replay');
+ assert.equal(await page.getByRole('button',{name:'Лично принять смену',exact:true}).count(),0);
  // The recipient can inspect the closed outgoing shift and its frozen transfer.
  await page.locator('summary').filter({hasText:'История смен'}).click();
  await page.locator('select[name="status"]').selectOption('closed');

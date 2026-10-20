@@ -8,6 +8,7 @@ import type { CashView } from './CashPanel';
 import { HandoverPanel } from './HandoverPanel';
 import { ExcelSyncPanel } from './ExcelSyncPanel';
 import { confirmChecklistDiscard } from './checklist-drafts';
+import { blockerHint } from './action-feedback';
 
 type Entry = { code: string; phase: string; label: string; help_text: string; answer: string; comment: string; equipment_check: boolean; equipment_issue: boolean; answered_by: string | null; version: number };
 type Note = { id: string; checklist_code: string; category: string; object_label: string; text: string; version: number };
@@ -16,7 +17,7 @@ type Blocker = { code: string; item_code?: string; message: string };
 type Progress = { completed: number; total: number; blockers: Blocker[] };
 type Readiness = { acceptance: Progress; closing: Progress; blockers: Blocker[]; can_activate: boolean; can_prepare_handover: boolean };
 
-export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }: { identity: Identity; users: User[];excelSyncEnabled:boolean;onSessionEnd:()=>Promise<void> }) {
+export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }: { identity: Identity; users: User[];excelSyncEnabled:boolean;onSessionEnd:()=>Promise<Identity | null> }) {
   const [shift, setShift] = useState<Shift | null>(null);
   const [ready, setReady] = useState<Readiness | null>(null);
   const [error, setError] = useState('');
@@ -36,6 +37,10 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
     form.scrollIntoView({ block: 'center' });
     const control = form.querySelector<HTMLElement>('select:not(:disabled), textarea:not(:disabled), input:not(:disabled), button:not(:disabled)');
     (control ?? form).focus({ preventScroll: true });
+  }
+  function focusSection(id: string) {
+    const target = document.getElementById(id);
+    target?.scrollIntoView({ block: 'center' }); target?.focus({ preventScroll: true });
   }
   const attempt = useRef<{ body: string; key: string } | null>(null);
   const actor = identity.user.id;
@@ -127,7 +132,12 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
       <ExcelSyncPanel key={shift.id} shiftID={shift.id} version={shift.version} enabled={excelSyncEnabled} />
       {!editable && <p>Просмотр без права изменения. Ответы заполняет назначенный администратор после личного PIN-входа.</p>}
       {ready && <div className="progress-grid" aria-label="Сохранённый прогресс чек-листов">{(['acceptance', 'closing'] as const).map(phase => <div className="progress-card" key={phase}><h3>{phase === 'acceptance' ? 'Приём смены' : 'Сдача смены'}<span>{ready[phase].completed} / {ready[phase].total}</span></h3><progress max={ready[phase].total || 1} value={ready[phase].completed} aria-label={phase === 'acceptance' ? 'Прогресс приёма' : 'Прогресс сдачи'} /><p>{ready[phase].blockers.length ? `Причин, требующих внимания: ${ready[phase].blockers.length}` : 'Обязательные пункты заполнены'}</p></div>)}</div>}
-      <aside className="readiness-status">{ready ? ready.blockers.length ? <details><summary>Что осталось проверить: {ready.blockers.length}</summary><ul>{ready.blockers.map((blocker, index) => <li key={blocker.code + ':' + index}>{blocker.item_code ? <button type="button" className="blocker-link" onClick={() => { if (blocker.item_code) focusEntry(blocker.item_code); }}>{blocker.message}</button> : blocker.message}</li>)}</ul></details> : <p>По сохранённым данным блокирующих причин нет. Для ответственного действия потребуется личное подтверждение.</p> : <p>Проверка готовности ещё не получена.</p>}</aside>
+      <aside className="readiness-status">{ready ? ready.blockers.length ? <details><summary>Что осталось проверить: {ready.blockers.length}</summary><ul>{ready.blockers.map((blocker, index) => <li key={blocker.code + ':' + index}>
+        {blocker.item_code ? <button type="button" className="blocker-link" onClick={() => { if (blocker.item_code) focusEntry(blocker.item_code); }}>{blocker.message}</button> : blocker.message}
+        {blockerHint(blocker.code) && <p>{blockerHint(blocker.code)}</p>}
+        {blocker.code === 'NOTE_REQUIRED' && <button type="button" className="blocker-link" onClick={() => focusSection('shift-notes')}>Перейти к замечаниям</button>}
+        {(blocker.code.startsWith('CASH_') || blocker.code === 'OPENING_COUNT_REQUIRED') && shift.cash && <button type="button" className="blocker-link" onClick={() => focusSection('shift-cash')}>Перейти к кассе</button>}
+      </li>)}</ul></details> : <p>По сохранённым данным блокирующих причин нет. Для ответственного действия потребуется личное подтверждение.</p> : <p>Проверка готовности ещё не получена.</p>}</aside>
       {(['acceptance', 'closing'] as const).map(phase => <div className="checklist-phase" key={phase}>
         <h3>{phase === 'acceptance' ? 'Приём' : 'Сдача'}: {ready ? `${ready[phase].completed} из ${ready[phase].total}` : 'Проверяем…'}</h3>
         <button type="button" className="checklist-jump" disabled={busy || !ready?.[phase].blockers.some(blocker => blocker.item_code)} onClick={() => { const code = ready?.[phase].blockers.find(blocker => blocker.item_code)?.item_code; if (code) focusEntry(code); }}>К первому незавершённому пункту · {phase === 'acceptance' ? 'приём' : 'сдача'}</button>
@@ -135,9 +145,9 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
       </div>)}
       <fieldset className="shift-actions" disabled={dirtyCount > 0}><legend>Приём, касса и передача</legend>
       {!(shift.status==='opening'&&shift.handover_parent_id)&&<CashPanel key={"cash:" + generation + ":" + shift.id + ":" + shift.version} identity={identity} shift={shift} readyToActivate={ready?.can_activate === true} refresh={load} />}
-      <HandoverPanel key={"handover:"+generation+":"+shift.id+":"+shift.version} identity={identity} shift={shift} users={users} canPrepare={ready?.can_prepare_handover===true} refresh={load} onSessionEnd={onSessionEnd}/>
+      <HandoverPanel key={"handover:"+generation+":"+shift.id+":"+shift.version} identity={identity} shift={shift} users={users} canPrepare={ready?.can_prepare_handover===true} checklistReady={!!ready && ready.acceptance.total > 0 && ready.acceptance.blockers.length === 0 && ready.acceptance.completed === ready.acceptance.total} refresh={load} onSessionEnd={onSessionEnd}/>
       </fieldset>
-      <h3>Замечания</h3>
+      <h3 id="shift-notes" tabIndex={-1}>Замечания</h3>
       {shift.notes.length ? <ul>{shift.notes.map(note => <li key={note.id}><strong>{note.category === 'equipment' ? 'Неисправность' : note.category === 'conflict' ? 'Конфликт' : 'Заметка'}</strong> {note.object_label}: {note.text}</li>)}</ul> : <p>Замечаний пока нет. Это не означает, что оборудование уже проверено.</p>}
       {editable && <form data-checklist-dirty={dirty.current.has('note') ? 'true' : undefined} onChange={event => { const data = new FormData(event.currentTarget); markDirty('note', !!data.get('text') || !!data.get('object') || !!data.get('code') || data.get('category') !== 'general'); }} onSubmit={event => void saveNote(event)}>
         <label>Пункт<select name="code" defaultValue=""><option value="">Общая заметка</option>{shift.checklist.filter(entry => shift.status === 'opening' ? entry.phase === 'acceptance' : entry.phase === 'closing').map(entry => <option key={entry.code} value={entry.code}>{entry.label}</option>)}</select></label>

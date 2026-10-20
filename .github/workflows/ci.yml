@@ -73,6 +73,7 @@ jobs:
         run: |
           node web/e2e/excel-status.mjs
           node web/e2e/checklist-drafts.mjs
+          node web/e2e/handover-recovery.mjs
       - name: Build deployment image and validate isolated runtime
         run: |
           docker build -t pc-club-admin:local .
