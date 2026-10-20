@@ -69,7 +69,9 @@ jobs:
       - name: Excel status UI with intercepted API (no Google requests)
         env:
           PC_CLUB_CHROMIUM: /usr/bin/google-chrome
-        run: node web/e2e/excel-status.mjs
+        run: |
+          node web/e2e/excel-status.mjs
+          node web/e2e/checklist-drafts.mjs
       - name: Build deployment image and validate isolated runtime
         run: |
           docker build -t pc-club-admin:local .
