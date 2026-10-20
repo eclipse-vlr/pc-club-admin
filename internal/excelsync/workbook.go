@@ -449,6 +449,7 @@ func checkArchive(input []byte) error {
 		return err
 	}
 	decoder := xml.NewDecoder(bytes.NewReader(data))
+	rowCount, rowNumber, columnCount, columnNumber := 0, 0, 0, 0
 	for {
 		token, err := decoder.Token()
 		if err == io.EOF {
@@ -461,22 +462,38 @@ func checkArchive(input []byte) error {
 		if !ok {
 			continue
 		}
+		// OOXML permits omitted coordinates; counting only explicit r attributes
+		// lets a small compressed file bypass the grid budget before GetRows.
+		if start.Name.Local == "row" {
+			rowCount++
+			rowNumber++
+			columnCount, columnNumber = 0, 0
+		}
+		if start.Name.Local == "c" {
+			columnCount++
+			columnNumber++
+		}
 		for _, attribute := range start.Attr {
 			if attribute.Name.Local != "r" {
 				continue
 			}
 			if start.Name.Local == "row" {
 				row, err := strconv.Atoi(attribute.Value)
+				rowNumber = row
 				if err != nil || row < 1 || row > maxRows {
 					return fail("EXCEL_ROW_LIMIT")
 				}
 			}
 			if start.Name.Local == "c" {
 				col, row, err := excelize.CellNameToCoordinates(attribute.Value)
+				columnNumber = col
 				if err != nil || col > 100 || row > maxRows {
 					return fail("EXCEL_ROW_LIMIT")
 				}
 			}
+		}
+		if rowCount > maxRows || rowNumber > maxRows || columnCount > 100 || columnNumber > 100 {
+			return fail("EXCEL_ROW_LIMIT")
 		}
 	}
 }
