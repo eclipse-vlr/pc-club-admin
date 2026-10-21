@@ -64,9 +64,16 @@ function docker {
     }
     if ($state.Mode -eq 'excel-access' -and $command.EndsWith(' excel-check')) { $global:LASTEXITCODE=1; return 'synthetic-provider-secret' }
     if ($state.Mode -eq 'backup' -and $command.Contains('pg_dump')) { $global:LASTEXITCODE=1; return 'synthetic-provider-secret' }
+    if ($command.Contains('sha256sum')) {
+        $hasher=[Security.Cryptography.SHA256]::Create()
+        try { $checksum=[BitConverter]::ToString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes('synthetic archive for intercepted Docker'))).Replace('-','').ToLowerInvariant() }
+        finally { $hasher.Dispose() }
+        return ($checksum + '  /tmp/synthetic.dump')
+    }
     if ($command.Contains(' cp db:')) {
         if ($state.Mode -eq 'backup-copy') { $global:LASTEXITCODE=1; return 'synthetic-provider-secret' }
-        [IO.File]::WriteAllText($args[$args.Count-1], 'synthetic archive for intercepted Docker')
+        $archive=if ($state.Mode -eq 'backup-corrupt') { 'corrupted copy' } else { 'synthetic archive for intercepted Docker' }
+        [IO.File]::WriteAllText($args[$args.Count-1], $archive, (New-Object Text.UTF8Encoding($false)))
     }
     if ($state.Mode -eq 'migration' -and $command.EndsWith(' migrate')) { $global:LASTEXITCODE=1; return 'synthetic-provider-secret' }
     if ($command.Contains('SELECT EXISTS')) {
@@ -208,7 +215,7 @@ try {
     $nextImage=$image.Replace(('a'*64),('c'*64))
     [IO.File]::WriteAllText((Join-Path $fixture 'release-image.txt'),$nextImage)
     $global:PCClubContainerFixture.ExpectedImage=$nextImage
-    foreach ($mode in @('backup','backup-copy')) {
+    foreach ($mode in @('backup','backup-copy','backup-corrupt')) {
         $global:PCClubContainerFixture.Mode=$mode;$global:PCClubContainerFixture.Calls=@()
         Invoke-Rejected { & $launcher -Update -NoBrowser }
         Assert-Container ([IO.File]::ReadAllText($file) -eq $text) 'Failed backup changed the pinned image or secrets.'
