@@ -12,6 +12,7 @@ const origin = 'http://127.0.0.1:54321';
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
 const user = { id: '11111111-1111-4111-8111-111111111111', display_name: 'Тестовый администратор', roles: ['admin'], active: true };
 let shift = { id: '22222222-2222-4222-8222-222222222222', owner_id: user.id, status: 'opening', kind: 'day', business_date: '2026-10-20', template_version: 1, version: 1, notes: [], cash: null, handover_id: '', handover_parent_id: '', checklist: ['accept_d', 'accept_e'].map((code, i) => ({ code, phase: 'acceptance', label: 'Пункт ' + (i + 1), help_text: '', answer: 'unanswered', comment: '', equipment_check: false, equipment_issue: false, answered_by: null, version: 1 })) };
+shift.cash = { session: { version: 1, opening_cash_kopecks: '0', opening_confirmed_at: null, counted_opening_kopecks: null, langame_cash_amount_kopecks: null, extra_cash_refunds_kopecks: null, extra_cash_expenses_kopecks: null, counted_closing_kopecks: null, movements: [] }, summary: { expected_closing_kopecks: null, difference_kopecks: null, collection_total_kopecks: '0', policy_version: 'draft-v1', verified: false, blockers: [] } };
 let concurrent = false;
 let savedFirst = false;
 let logoutCalls = 0;
@@ -52,7 +53,7 @@ try {
           '/api/v1/auth/csrf': { csrf_token: 'synthetic-csrf' },
           '/api/v1/shifts/current': { shift },
           ['/api/v1/shifts/' + shift.id]: shift,
-          ['/api/v1/shifts/' + shift.id + '/readiness']: { acceptance: { completed: 2 - blockers.length, total: 2, blockers }, closing: { completed: 0, total: 0, blockers: [] }, blockers, can_activate: false, can_prepare_handover: false },
+          ['/api/v1/shifts/' + shift.id + '/readiness']: { acceptance: { completed: 2 - blockers.length, total: 2, blockers }, closing: { completed: 0, total: 0, blockers: [] }, blockers, can_activate: blockers.length === 0, can_prepare_handover: false },
         };
         if (Object.hasOwn(fixtures, url.pathname)) { await route.fulfill({ json: fixtures[url.pathname] }); return; }
       }
@@ -73,7 +74,7 @@ try {
   await first.locator('select').selectOption('yes');
   await second.locator('textarea').fill('Несохранённое замечание второго пункта');
   assert.equal(await page.locator('form[data-checklist-dirty="true"]').count(), 2);
-  assert.ok(await page.locator('fieldset.shift-actions').evaluate(element => element.disabled), 'responsibility actions stay disabled while drafts exist');
+  assert.ok(await page.getByRole('button', { name: 'Подтвердить первый приём', exact: true }).isDisabled(), 'personal acceptance stays disabled while drafts exist');
   assert.ok(await page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; }), 'browser reload warning is enabled');
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', { name: 'Выйти / сменить сотрудника', exact: true }).click();
@@ -92,7 +93,7 @@ try {
   await second.getByRole('button', { name: 'Сохранить ответ', exact: true }).click();
   await second.getByText('Сохранено', { exact: true }).waitFor();
   assert.equal(await page.locator('form[data-checklist-dirty="true"]').count(), 0);
-  assert.ok(!await page.locator('fieldset.shift-actions').evaluate(element => element.disabled));
+  assert.ok(await page.getByRole('button', { name: 'Подтвердить первый приём', exact: true }).isEnabled());
   assert.equal(await page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; }), false, 'warning clears after confirmed saves');
   const notes = page.locator('form').filter({ has: page.getByRole('button', { name: 'Сохранить замечание', exact: true }) });
   await notes.locator('textarea').fill('Замечание ещё не сохранено');
@@ -101,8 +102,11 @@ try {
   await page.waitForFunction(() => !document.querySelector('form[data-checklist-dirty="true"]'));
   // Another snapshot must not erase a draft or upgrade its optimistic-lock version.
   concurrent = true;
+  await second.locator('summary').click();
+  await first.locator('summary').click();
   await second.locator('textarea').fill('Локальный черновик при конфликте');
   await first.locator('textarea').fill('Сохранить другой пункт');
+  assert.ok(await page.getByRole('button', { name: 'Подтвердить первый приём', exact: true }).isDisabled(), 'saved readiness cannot authorize a new unsaved edit');
   await first.getByRole('button', { name: 'Сохранить ответ', exact: true }).click();
   await first.getByText('Сохранено', { exact: true }).waitFor();
   assert.equal(await second.locator('textarea').inputValue(), 'Локальный черновик при конфликте');

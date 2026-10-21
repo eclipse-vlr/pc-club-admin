@@ -88,6 +88,8 @@ try {
   assert.ok(await page.locator('.skip-link').evaluate(element => element === document.activeElement));
   await page.keyboard.press('Enter');
   assert.ok(await page.locator('#workspace').evaluate(element => element === document.activeElement), 'skip link moves keyboard focus');
+  await panel.locator('#accept-blockers').getByRole('button', { name: 'Сохраните собственный пересчёт наличных.', exact: true }).click();
+  assert.ok(await panel.locator('input[name="counted"]').evaluate(node => node === document.activeElement), 'receipt blocker focuses the actual field');
   const receipt = panel.locator('form').filter({ has: page.getByRole('button', { name: 'Сохранить мой пересчёт', exact: true }) });
   await receipt.locator('input').fill('15000');
   await receipt.evaluate(form => { form.requestSubmit(); form.requestSubmit(); });

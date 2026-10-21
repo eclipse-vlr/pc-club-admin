@@ -91,6 +91,7 @@ jobs:
           node web/e2e/checklist-drafts.mjs
           node web/e2e/handover-recovery.mjs
           node web/e2e/theme.mjs
+          node web/e2e/workflow-ui.mjs
       - name: Build deployment image and validate isolated runtime
         run: |
           node scripts/test-staging-config.mjs

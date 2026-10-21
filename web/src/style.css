@@ -768,3 +768,30 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .shift-shortcuts a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); color: var(--ink); font-size: 14px; text-decoration: none; }
 .shift-shortcuts a:hover { border-color: var(--accent); color: var(--accent); }
 .identity-card button:hover:not(:disabled), .login-card nav button[aria-pressed="false"]:hover:not(:disabled) { background: var(--raised); color: var(--ink); }
+
+/* Folded controls stay mounted so navigating a checklist never discards drafts. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.checklist-phase > summary { padding: 16px 0; }
+.checklist-phase > summary h3 { display: inline; margin: 0; font-size: 19px; }
+.checklist-phase > summary > span { display: block; margin: 5px 0 0 18px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.checklist-grid { align-items: start; }
+.checklist-item { height: auto; }
+.checklist-item > details { border: 1px solid var(--line); border-radius: 12px; margin: 0; background: var(--surface); }
+.checklist-item > details > summary { padding: 14px 16px; font-size: 14px; overflow-wrap: anywhere; }
+.checklist-item > details > summary [role="status"] { display: block; margin-top: 6px; font-weight: 400; }
+.checklist-item fieldset { height: auto; border: 0; background: none; padding-top: 0; }
+.checklist-item[data-complete="true"] > details { border-color: var(--success-line); }
+.checklist-item[data-checklist-dirty="true"] > details { border-color: var(--warning-line); }
+.save-destinations { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.save-destinations > div { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.save-destinations h4 { margin: 0 0 6px; font-size: 14px; color: var(--ink); }
+.save-destinations .storage-saved [role="status"] { color: var(--success-text); }
+.save-destinations .storage-pending [role="status"] { color: var(--warning-text); }
+.action-requirements { margin: 12px 0 0; padding: 14px 16px; }
+.action-requirements strong { display: block; font-size: 14px; }
+.action-blockers { margin: 8px 0 0; padding-left: 20px; }
+.action-blockers li { margin: 8px 0; font-size: 14px; }
+.action-blockers p { font-size: 12px; margin: 4px 0; }
+.action-requirements details { margin-top: 10px; }
+.action-requirements summary { color: var(--warning-text); font-size: 13px; }
+@media (max-width: 760px) { .save-destinations { grid-template-columns: 1fr; } }
