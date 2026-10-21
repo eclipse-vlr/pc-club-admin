@@ -11,6 +11,7 @@ import { EmployeePanel } from './EmployeePanel';
 import { AuditPanel } from './AuditPanel';
 import { ManagerDashboard } from './ManagerDashboard';
 import { confirmChecklistDiscard, hasUnsavedChecklist } from './checklist-drafts';
+import { ThemeToggle } from './ThemeToggle';
 
 function App() {
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -21,6 +22,7 @@ function App() {
  const [clubTimezone,setClubTimezone]=useState('UTC');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [messageKind, setMessageKind] = useState<'error' | 'success'>('error');
   const [mode, setMode] = useState<'admin' | 'manager'>('admin');
   const [users, setUsers] = useState<User[]>([]);
  const [newRole,setNewRole]=useState('admin');
@@ -65,7 +67,7 @@ function App() {
       lastActivity = Date.now();
       void api('/auth/activity', 'POST', {}, actor).catch(error => {
         if (error instanceof APIError && ['AUTH_REQUIRED', 'SESSION_CHANGED', 'DEVICE_REQUIRED'].includes(error.code)) {
-          setIdentity(null); setMessage('Сессия завершена или пользователь изменён. Войдите заново.');
+          setIdentity(null); setMessageKind('error'); setMessage('Сессия завершена или пользователь изменён. Войдите заново.');
         }
       });
     };
@@ -75,27 +77,30 @@ function App() {
   }, [identity]);
 
   async function perform(work: () => Promise<void>) {
-    setBusy(true); setMessage('');
+    setBusy(true); setMessage(''); setMessageKind('success');
     try { await work(); await refresh(); }
     catch (error) {
+      setMessageKind('error');
       setMessage(error instanceof APIError ? error.message : 'Не удалось связаться с сервером. Действие могло сохраниться — обновите страницу перед повтором.');
       if (error instanceof APIError && ['AUTH_REQUIRED', 'SESSION_CHANGED', 'DEVICE_REQUIRED'].includes(error.code)) setIdentity(null);
     } finally { setBusy(false); }
   }
   function submit(event: FormEvent<HTMLFormElement>, work: (data: FormData) => Promise<void>) {
-    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form); form.reset();
-    void perform(() => work(data));
+    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+    // Keep names and selections on failure; clear submitted secrets immediately.
+    form.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
+    void perform(async () => { await work(data); form.reset(); });
   }
   const text = (data: FormData, key: string) => String(data.get(key) ?? '');
   const actor = identity?.user.id ?? '';
 
   return <main>
     <a className="skip-link" href="#workspace">К рабочему экрану</a>
-    <header className="app-header"><a className="brand" href="#workspace"><span className="brand-mark" aria-hidden="true">PC</span><span>CLUB ADMIN<small>Управление сменами</small></span></a><span className="mode-badge">{environment === 'test' ? 'Тестовый режим' : environment === 'production' ? 'Рабочие операции заблокированы' : 'Подключение…'}</span></header>
+    <header className="app-header"><a className="brand" href="#workspace"><span className="brand-mark" aria-hidden="true">PC</span><span>CLUB ADMIN<small>Управление сменами</small></span></a><div className="header-actions"><span className="mode-badge">{environment === 'test' ? 'Тестовый режим' : environment === 'production' ? 'Рабочие операции заблокированы' : 'Подключение…'}</span><ThemeToggle /></div></header>
     <div className="page-heading" id="workspace" tabIndex={-1}><p className="eyebrow">{identity ? 'Рабочее пространство' : 'Компьютерный клуб'}</p>
     <h1>{identity ? identity.user.display_name : 'Вход в приложение'}</h1><p className="page-description">{identity ? 'Смена, проверки и передача ответственности — в одном месте.' : 'Войдите в личную учётную запись, чтобы продолжить работу.'}</p></div>
     <aside className="notice mode-notice"><strong>{environment === 'production' ? 'Рабочие операции заблокированы' : 'Демонстрационная версия'}</strong><p>Кассовая политика не подтверждена. Используйте только вымышленные тестовые данные.</p><details><summary>Правила работы в тестовом режиме</summary><p>Приём и передача требуют чек-листа, пересчёта кассы и личного PIN. Передача выполняется двумя сотрудниками на одном зарегистрированном браузере. Production заблокирован до проверки денежной политики.</p></details></aside>
-    {message && <p className="error" role="alert">{message}</p>}
+    {message && <p className={messageKind} role={messageKind === 'error' ? 'alert' : 'status'}>{message}</p>}
     {loading ? <p role="status">Проверяем сессию…</p> : identity ? <>
       <section className="identity-card"><h2>Личный вход подтверждён</h2><p>Роли: {identity.user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')}.</p>
         <p>{identity.device_trusted ? 'Браузер зарегистрирован в клубе.' : 'Удалённый вход. Доверие клубному браузеру не назначено.'}</p>
