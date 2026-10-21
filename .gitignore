@@ -1,5 +1,6 @@
 /reference/
 /docs/
+/deploy/.container-start.lock
 .env
 .env.*
 !.env.example
