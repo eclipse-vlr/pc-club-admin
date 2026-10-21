@@ -138,7 +138,7 @@ try {
     }
     foreach ($key in $settings.Keys) { [Environment]::SetEnvironmentVariable($key, $settings[$key], 'Process') }
     $compose = @('compose', '--project-name', 'pc-club-staging', '--env-file', $configuration, '-f', $composeFile)
-    $rendered = Invoke-LocalDocker -Arguments ($compose + @('config', '--format', 'json')) -Failure 'Некорректная конфигурация тестового контура.'
+    $rendered = Invoke-LocalDocker -Arguments ($compose + @('--profile', 'tools', 'config', '--format', 'json')) -Failure 'Некорректная конфигурация тестового контура.'
     $effective = $rendered | ConvertFrom-Json
     if ($effective.name -cne 'pc-club-staging') { throw 'Неожиданное имя проекта Compose.' }
     foreach ($serviceName in @('api', 'migrate', 'admin')) {
