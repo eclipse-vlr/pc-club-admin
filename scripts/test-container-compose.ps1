@@ -31,15 +31,23 @@ function docker {
 function Invoke-RestMethod {
     param([string]$Uri,[int]$TimeoutSec)
     if ($Uri.EndsWith('/readyz')) { return @{status='ready'} }
-    return @{environment='test';cash_policy_status='unverified';excel_sync_enabled=$false}
+    return @{environment='test';cash_policy_status='unverified';excel_sync_enabled=[bool]$env:STAGING_EXCEL_FILE_ID}
 }
 function Start-Process { throw 'Browser must stay closed.' }
 try {
     New-Item -ItemType Directory -Path (Join-Path $fixture 'scripts'),(Join-Path $fixture 'deploy') | Out-Null
     Copy-Item (Join-Path $PSScriptRoot 'start-container.ps1') (Join-Path $fixture 'scripts')
+    Copy-Item (Join-Path $PSScriptRoot 'container-excel.ps1') (Join-Path $fixture 'scripts')
     Copy-Item (Join-Path (Split-Path -Parent $PSScriptRoot) 'deploy/compose.staging.yaml') (Join-Path $fixture 'deploy')
+    Copy-Item (Join-Path (Split-Path -Parent $PSScriptRoot) 'deploy/compose.excel-test.yaml') (Join-Path $fixture 'deploy')
     & (Join-Path $fixture 'scripts/start-container.ps1') -Image ('ghcr.io/eclipse-vlr/pc-club-admin@sha256:'+('a'*64)) -NoBrowser
     if (-not $global:PCClubRealCompose.Parsed -or $global:PCClubRealCompose.Mutations -ne 5) { throw 'Real Compose parser or expected interception was skipped.' }
+    $keyFile=Join-Path ([IO.Path]::GetTempPath()) ('synthetic parser key '+[guid]::NewGuid().ToString('N')+'.json')
+    try {
+        [IO.File]::WriteAllText($keyFile,'synthetic, not a Google key')
+        & (Join-Path $fixture 'scripts/start-container.ps1') -NoBrowser -ExcelFileId 'synthetic-copy' -ExcelCredentialsFile $keyFile -ConfirmTestFileId 'synthetic-copy'
+        if ($global:PCClubRealCompose.Mutations -ne 11) { throw 'Excel connection did not use actual Compose with intercepted access check.' }
+    } finally { Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue }
     Write-Host 'PASS: launcher accepted actual Docker Compose JSON; registry, HTTP and all five container/database operations were intercepted.'
 } finally {
     Remove-Item -LiteralPath $fixture -Recurse -Force

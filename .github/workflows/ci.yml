@@ -90,6 +90,7 @@ jobs:
           node web/e2e/excel-status.mjs
           node web/e2e/checklist-drafts.mjs
           node web/e2e/handover-recovery.mjs
+          node web/e2e/theme.mjs
       - name: Build deployment image and validate isolated runtime
         run: |
           node scripts/test-staging-config.mjs
@@ -97,6 +98,9 @@ jobs:
           docker pull caddy:2.11.2-alpine
           node scripts/test-container.mjs
           node scripts/test-staging.mjs
+      - name: Container update backup and actual PostgreSQL restore
+        shell: pwsh
+        run: ./scripts/test-container-update.ps1
       - name: Browser setup, handover, history and remote manager
         env:
           PC_CLUB_BROWSER_TEST: '1'
@@ -183,7 +187,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/windows/scripts" "$RUNNER_TEMP/windows/deploy"
           cp start-container.cmd "$RUNNER_TEMP/windows/"
           cp scripts/start-container.ps1 "$RUNNER_TEMP/windows/scripts/"
+          cp scripts/container-excel.ps1 "$RUNNER_TEMP/windows/scripts/"
+          cp scripts/container-update.ps1 "$RUNNER_TEMP/windows/scripts/"
           cp deploy/compose.staging.yaml "$RUNNER_TEMP/windows/deploy/"
+          cp deploy/compose.excel-test.yaml "$RUNNER_TEMP/windows/deploy/"
           printf '%s\n' "$RELEASE_IMAGE" > "$RUNNER_TEMP/windows/release-image.txt"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

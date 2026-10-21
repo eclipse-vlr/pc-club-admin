@@ -1,0 +1,34 @@
+# Explicit opt-in for a disposable XLSX copy. The key is never copied into an image.
+services:
+  api:
+    environment:
+      DRIVE_EXCEL_SYNC: test
+      DRIVE_EXCEL_FILE_ID: ${STAGING_EXCEL_FILE_ID:?Select the test XLSX copy}
+      DRIVE_EXCEL_CREDENTIALS_FILE: /run/secrets/pcclub-excel.json
+    volumes:
+      - type: bind
+        source: ${STAGING_EXCEL_CREDENTIALS_FILE:?Select the local service account JSON}
+        target: /run/secrets/pcclub-excel.json
+        read_only: true
+        bind:
+          create_host_path: false
+  excel-check:
+    image: ${STAGING_IMAGE:?Select the tested image}
+    pull_policy: never
+    profiles: [tools]
+    entrypoint: [/app/excel-check]
+    command: [-credentials, /run/secrets/pcclub-excel.json, -file-id, '${STAGING_EXCEL_FILE_ID:?Select the test XLSX copy}']
+    environment:
+      APP_ENV: test
+    volumes:
+      - type: bind
+        source: ${STAGING_EXCEL_CREDENTIALS_FILE:?Select the local service account JSON}
+        target: /run/secrets/pcclub-excel.json
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [access]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

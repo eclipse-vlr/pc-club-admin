@@ -7,7 +7,7 @@ $file = Join-Path $fixture 'deploy/.env.staging'
 $image = 'ghcr.io/eclipse-vlr/pc-club-admin@sha256:' + ('a' * 64)
 $previousExit = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
 $previousExitValue = if ($null -ne $previousExit) { $previousExit.Value } else { 0 }
-$global:PCClubContainerFixture = @{ Mode = ''; Calls = @(); ExpectedHost = ''; HasUsers = $false }
+$global:PCClubContainerFixture = @{ Mode = ''; Calls = @(); ExpectedHost = ''; HasUsers = $false; ExpectedImage=$image }
 function Assert-Container { param([bool]$Condition, [string]$Message); if (-not $Condition) { throw $Message } }
 function Invoke-Rejected {
     param([scriptblock]$Work)
@@ -41,18 +41,32 @@ function docker {
         return @{ Os='linux'; Architecture='amd64'; Config=@{ User='10001:10001'; Labels=@{'org.opencontainers.image.source'=$source; 'org.opencontainers.image.revision'=('b'*40)}}} | ConvertTo-Json -Depth 5 -Compress
     }
     Assert-Container ($command.StartsWith('compose --project-name pc-club-staging --env-file ')) 'Unexpected Docker mutation.'
-    Assert-Container ($env:STAGING_IMAGE -eq $image) 'Caller image overrode saved settings.'
+    Assert-Container ($env:STAGING_IMAGE -eq $state.ExpectedImage) 'Caller image overrode selected settings.'
     if ($command.EndsWith('config --format json')) {
-        $app = @{ image=$image; environment=@{
+        $app = @{ image=$env:STAGING_IMAGE; environment=@{
             APP_ENV='test'; CASH_POLICY_STATUS='unverified'; DRIVE_EXCEL_SYNC='disabled'
             PIN_PEPPER=$env:STAGING_PIN_PEPPER
             DATABASE_URL=('postgres://pcclub_staging:'+$env:STAGING_DB_PASSWORD+'@db/pcclub_staging?sslmode=disable')
         }; ports=@(@{host_ip='127.0.0.1';published='18080'}) }
         if ($state.Mode -eq 'unsafe-compose') { $app.environment.DATABASE_URL='postgres://example.invalid/real' }
-        return @{ name='pc-club-staging';services=@{
+        $services=@{
             api=$app;migrate=$app;admin=$app
             db=@{environment=@{POSTGRES_USER='pcclub_staging';POSTGRES_DB='pcclub_staging';POSTGRES_PASSWORD=$env:STAGING_DB_PASSWORD};volumes=@(@{source='staging_postgres_data'})}
-        };volumes=@{staging_postgres_data=@{name='pc-club-staging_staging_postgres_data'}} } | ConvertTo-Json -Depth 8 -Compress
+        }
+        if ($command.Contains('compose.excel-test.yaml')) {
+            $services.api = @{ image=$env:STAGING_IMAGE; environment=@{ APP_ENV='test';DRIVE_EXCEL_SYNC='test';DRIVE_EXCEL_FILE_ID=$env:STAGING_EXCEL_FILE_ID;DRIVE_EXCEL_CREDENTIALS_FILE='/run/secrets/pcclub-excel.json';CASH_POLICY_STATUS='unverified';PIN_PEPPER=$env:STAGING_PIN_PEPPER;DATABASE_URL=$app.environment.DATABASE_URL }
+                ports=$app.ports
+                volumes=@(@{type='bind';source=$env:STAGING_EXCEL_CREDENTIALS_FILE;target='/run/secrets/pcclub-excel.json';read_only=$true;bind=@{create_host_path=$false}}) }
+            $services['excel-check']=$services.api
+            if ($state.Mode -eq 'unsafe-excel') { $services.api.volumes[0].read_only=$false }
+        }
+        return @{ name='pc-club-staging';services=$services;volumes=@{staging_postgres_data=@{name='pc-club-staging_staging_postgres_data'}} } | ConvertTo-Json -Depth 8 -Compress
+    }
+    if ($state.Mode -eq 'excel-access' -and $command.EndsWith(' excel-check')) { $global:LASTEXITCODE=1; return 'synthetic-provider-secret' }
+    if ($state.Mode -eq 'backup' -and $command.Contains('pg_dump')) { $global:LASTEXITCODE=1; return 'synthetic-provider-secret' }
+    if ($command.Contains(' cp db:')) {
+        if ($state.Mode -eq 'backup-copy') { $global:LASTEXITCODE=1; return 'synthetic-provider-secret' }
+        [IO.File]::WriteAllText($args[$args.Count-1], 'synthetic archive for intercepted Docker')
     }
     if ($state.Mode -eq 'migration' -and $command.EndsWith(' migrate')) { $global:LASTEXITCODE=1; return 'synthetic-provider-secret' }
     if ($command.Contains('SELECT EXISTS')) {
@@ -67,19 +81,22 @@ function Invoke-RestMethod {
     param([string]$Uri,[int]$TimeoutSec)
     Assert-Container ($Uri.StartsWith('http://127.0.0.1:18080/')) 'Non-local HTTP request.'
     if ($Uri.EndsWith('/readyz')) { return @{status='ready'} }
-    return @{environment='test';cash_policy_status='unverified';excel_sync_enabled=$false}
+    return @{environment='test';cash_policy_status='unverified';excel_sync_enabled=[bool]$env:STAGING_EXCEL_FILE_ID}
 }
 function Start-Process { throw 'Tests must not open a browser.' }
 function Read-Host { throw 'The packaged release must not ask the operator to choose a digest.' }
 $saved = @{}
-foreach ($key in @('DOCKER_HOST','DOCKER_CONTEXT','DOCKER_TLS_VERIFY','STAGING_IMAGE')) {
+foreach ($key in @('DOCKER_HOST','DOCKER_CONTEXT','DOCKER_TLS_VERIFY','STAGING_IMAGE','STAGING_EXCEL_FILE_ID','STAGING_EXCEL_CREDENTIALS_FILE')) {
     $saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')
 }
 $originalLocation = (Get-Location).Path
 try {
     New-Item -ItemType Directory -Path (Join-Path $fixture 'scripts'),(Join-Path $fixture 'deploy') | Out-Null
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'start-container.ps1') -Destination $launcher
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'container-excel.ps1') -Destination (Join-Path $fixture 'scripts')
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'container-update.ps1') -Destination (Join-Path $fixture 'scripts')
     [IO.File]::WriteAllText((Join-Path $fixture 'deploy/compose.staging.yaml'), 'synthetic intercepted fixture')
+    [IO.File]::WriteAllText((Join-Path $fixture 'deploy/compose.excel-test.yaml'), 'synthetic intercepted Excel fixture')
     [IO.File]::WriteAllText((Join-Path $fixture '.env'), 'synthetic-existing-development-settings')
     [IO.File]::WriteAllText((Join-Path $fixture '.demo.local.json'), 'synthetic-existing-drive-settings')
     [IO.File]::WriteAllText((Join-Path $fixture 'release-image.txt'), $image)
@@ -152,6 +169,60 @@ try {
     Assert-Container ((Get-Location).Path -eq $originalLocation) 'Caller directory was not restored.'
     Assert-Container ([IO.File]::ReadAllText((Join-Path $fixture '.env')) -eq 'synthetic-existing-development-settings') 'Development settings changed.'
     Assert-Container ([IO.File]::ReadAllText((Join-Path $fixture '.demo.local.json')) -eq 'synthetic-existing-drive-settings') 'Drive settings changed.'
+    $excelFile = Join-Path $fixture 'deploy/.excel.staging.json'
+    $keyFile = Join-Path ([IO.Path]::GetTempPath()) ('synthetic-key-' + [guid]::NewGuid().ToString('N') + '.json')
+    try {
+        [IO.File]::WriteAllText($keyFile,'synthetic-provider-secret')
+        foreach ($case in @(
+            @{ExcelFileId='synthetic-copy';ExcelCredentialsFile=$keyFile},
+            @{ExcelFileId='synthetic-copy';ExcelCredentialsFile=$keyFile;ConfirmTestFileId='other-copy'},
+            @{ExcelFileId='synthetic-copy';ExcelCredentialsFile=$file;ConfirmTestFileId='synthetic-copy'},
+            @{ExcelFileId='synthetic-copy';ExcelCredentialsFile=$keyFile;ConfirmTestFileId='synthetic-copy';DisableExcel=$true}
+        )) {
+            $global:PCClubContainerFixture.Calls=@()
+            Invoke-Rejected { & $launcher @case -NoBrowser }
+            Assert-Container ($global:PCClubContainerFixture.Calls.Count -eq 0) 'Invalid Excel parameters reached Docker.'
+        }
+        foreach ($mode in @('unsafe-excel','excel-access')) {
+            $global:PCClubContainerFixture.Mode=$mode;$global:PCClubContainerFixture.Calls=@()
+            Invoke-Rejected { & $launcher -NoBrowser -ExcelFileId 'synthetic-copy' -ExcelCredentialsFile $keyFile -ConfirmTestFileId 'synthetic-copy' }
+            Assert-Container (-not (Test-Path -LiteralPath $excelFile)) 'Failed Excel preflight persisted the connection.'
+            Assert-Container (-not ($global:PCClubContainerFixture.Calls -match 'up -d')) 'Failed Excel preflight restarted the database/API.'
+        }
+        $global:PCClubContainerFixture.Mode='';$global:PCClubContainerFixture.Calls=@()
+        & $launcher -NoBrowser -ExcelFileId 'synthetic-copy' -ExcelCredentialsFile $keyFile -ConfirmTestFileId 'synthetic-copy' | Out-Null
+        Assert-Container (Test-Path -LiteralPath $excelFile) 'Successful preflight did not save Excel settings.'
+        $excelOriginal=[IO.File]::ReadAllText($excelFile)
+        Assert-Container (-not $excelOriginal.Contains('synthetic-provider-secret')) 'Key contents entered saved settings.'
+        Assert-Container ([IO.File]::ReadAllText($file) -eq $text) 'Excel connection changed DB credentials/image.'
+        $global:PCClubContainerFixture.Calls=@()
+        & $launcher -NoBrowser | Out-Null
+        Assert-Container ([bool]($global:PCClubContainerFixture.Calls -match 'compose.excel-test.yaml')) 'Restart lost the Excel connection.'
+        Assert-Container (-not ($global:PCClubContainerFixture.Calls -match ' excel-check$')) 'Restart made access to the app depend on Google availability.'
+        Assert-Container ([IO.File]::ReadAllText($excelFile) -eq $excelOriginal) 'Restart rewrote Excel settings.'
+        Invoke-Rejected { & $launcher -NoBrowser -ExcelFileId 'different-copy' -ExcelCredentialsFile $keyFile -ConfirmTestFileId 'different-copy' }
+        & $launcher -NoBrowser -DisableExcel | Out-Null
+        Assert-Container (-not (Test-Path -LiteralPath $excelFile)) 'Excel disconnect was not persisted.'
+        Assert-Container ([IO.File]::ReadAllText($keyFile) -eq 'synthetic-provider-secret') 'Original key was changed.'
+    } finally { Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue }
+    $nextImage=$image.Replace(('a'*64),('c'*64))
+    [IO.File]::WriteAllText((Join-Path $fixture 'release-image.txt'),$nextImage)
+    $global:PCClubContainerFixture.ExpectedImage=$nextImage
+    foreach ($mode in @('backup','backup-copy')) {
+        $global:PCClubContainerFixture.Mode=$mode;$global:PCClubContainerFixture.Calls=@()
+        Invoke-Rejected { & $launcher -Update -NoBrowser }
+        Assert-Container ([IO.File]::ReadAllText($file) -eq $text) 'Failed backup changed the pinned image or secrets.'
+        Assert-Container (-not ($global:PCClubContainerFixture.Calls -match ' migrate$')) 'Failed backup reached migrations.'
+    }
+    $global:PCClubContainerFixture.Mode='';$global:PCClubContainerFixture.Calls=@()
+    & $launcher -Update -NoBrowser | Out-Null
+    Assert-Container ([IO.File]::ReadAllText($file) -ceq $text.Replace($image,$nextImage)) 'Update changed anything except the pinned image.'
+    $calls=$global:PCClubContainerFixture.Calls -join "`n"
+    Assert-Container ($calls.IndexOf('stop api') -lt $calls.IndexOf('pg_dump') -and $calls.IndexOf('pg_dump') -lt $calls.IndexOf('pg_restore') -and $calls.IndexOf(' cp db:') -lt $calls.LastIndexOf(' migrate')) 'Backup/update ordering is unsafe.'
+    $global:PCClubContainerFixture.Calls=@()
+    & $launcher -NoBrowser | Out-Null
+    Assert-Container (-not ($global:PCClubContainerFixture.Calls -match 'pg_dump')) 'Ordinary restart repeated the update backup.'
+    Assert-Container (-not ($calls -match 'down|volume rm')) 'Update removed data.'
     Write-Host 'Container launcher checks passed: first setup/restart, private secrets, preserved settings, local engine, pinned image, unsafe config and failure refusals.'
 } finally {
     $global:LASTEXITCODE = $previousExitValue

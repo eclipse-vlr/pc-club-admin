@@ -1,6 +1,7 @@
 .git
 docs
 deploy/.container-start.lock
+deploy/.excel.staging.json
 release-image.txt
 .env
 .env.*

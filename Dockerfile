@@ -18,7 +18,8 @@ COPY migrations/ migrations/
 RUN CGO_ENABLED=0 go build -trimpath -o /out/api ./cmd/api && \
     CGO_ENABLED=0 go build -trimpath -o /out/migrate ./cmd/migrate && \
     CGO_ENABLED=0 go build -trimpath -o /out/admin ./cmd/admin && \
-    CGO_ENABLED=0 go build -trimpath -o /out/healthcheck ./cmd/healthcheck
+    CGO_ENABLED=0 go build -trimpath -o /out/healthcheck ./cmd/healthcheck && \
+    CGO_ENABLED=0 go build -trimpath -o /out/excel-check ./cmd/excel-check
 
 FROM debian:bookworm-slim
 ARG SOURCE_REVISION=unknown
