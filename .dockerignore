@@ -1,4 +1,5 @@
 .git
+docs
 .env
 .env.*
 **/.env
