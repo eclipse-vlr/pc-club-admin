@@ -42,7 +42,7 @@ export function ExcelSyncPanel({ shiftID, version, enabled, unsavedCount = 0, sa
   return <aside className={'excel-status ' + (view.sent && localChanges ? 'is-pending' : view.tone)} aria-label="Отправка чек-листа в Excel">
     <h3>Автозаполнение Excel</h3>
     <div className="save-destinations">
-      <div role="group" aria-label="Сохранение в приложении" className={localChanges ? 'storage-pending' : 'storage-saved'}><h4>В приложении</h4><p role="status">{storageMessage}</p><p className="excel-meta">Сохранённая версия смены: {version}.</p></div>
+      <div role="group" aria-label="Сохранение в приложении" className={localChanges ? 'storage-pending' : 'storage-saved'}><h4>В приложении</h4><p role="status">{storageMessage}</p><p className="excel-meta">Статус ответов и замечаний чек-листа.</p></div>
       <div role="group" aria-label="Отправка в Excel"><h4>В Excel</h4><p role="status">{view.sent && localChanges ? 'Предыдущая сохранённая версия отправлена в Excel. Текущие правки ещё не подтверждены в таблице.' : view.message}</p></div>
     </div>
     {visible && <p className="excel-meta">{visible.last_success_at ? <>{currentSent ? 'Последняя успешная отправка' : 'Предыдущая успешная отправка'}: {lastSuccess ? <time dateTime={visible.last_success_at}>{lastSuccess} · время клуба</time> : 'время недоступно'}.{!currentSent && ' Новые изменения ещё не подтверждены.'}</> : 'Успешных отправок этой смены пока нет.'}</p>}
