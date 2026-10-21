@@ -7,7 +7,7 @@ RUN --mount=type=secret,id=proxy_ca \
 COPY web/ ./
 RUN npm run build
 
-FROM golang:1.26.9-bookworm AS backend
+FROM golang:1.26.10-bookworm AS backend
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=secret,id=proxy_ca \
