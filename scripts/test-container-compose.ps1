@@ -1,7 +1,7 @@
 # Real Compose parser with intercepted registry, HTTP and container mutations.
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
-$nativeDocker=(Get-Command docker -CommandType Application).Source
+$nativeDocker=(Get-Command docker -CommandType Application | Select-Object -First 1).Source
 $fixture=Join-Path ([IO.Path]::GetTempPath()) ('pcclub real compose '+[guid]::NewGuid().ToString('N'))
 $global:PCClubRealCompose=@{ Parsed=$false; Mutations=0 }
 function docker {
