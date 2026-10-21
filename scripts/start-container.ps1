@@ -72,6 +72,12 @@ try {
             throw 'Сохранённая версия образа не изменена. Перед обновлением создайте резервную копию и выполните инструкцию обновления.'
         }
         $Image = $settings.STAGING_IMAGE
+    } elseif (-not $Image -and (Test-Path -LiteralPath (Join-Path $root 'release-image.txt') -PathType Leaf)) {
+        $manifest = Get-Item -LiteralPath (Join-Path $root 'release-image.txt') -Force
+        if (($manifest.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $manifest.Length -gt 256) {
+            throw 'Некорректный файл версии готового пакета.'
+        }
+        $Image = [IO.File]::ReadAllText($manifest.FullName).Trim()
     } elseif (-not $Image) {
         $Image = Read-Host 'Вставьте ссылку ghcr.io образ@sha256 из итогов успешного CI в GitHub'
     }

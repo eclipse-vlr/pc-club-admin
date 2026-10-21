@@ -173,3 +173,18 @@ jobs:
         run: |
           docker image pull "$PC_CLUB_TEST_IMAGE"
           node scripts/test-staging.mjs
+      - name: Prepare the Windows starter with the tested digest
+        env:
+          RELEASE_IMAGE: ${{ steps.image.outputs.reference }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/windows/scripts" "$RUNNER_TEMP/windows/deploy"
+          cp start-container.cmd "$RUNNER_TEMP/windows/"
+          cp scripts/start-container.ps1 "$RUNNER_TEMP/windows/scripts/"
+          cp deploy/compose.staging.yaml "$RUNNER_TEMP/windows/deploy/"
+          printf '%s\n' "$RELEASE_IMAGE" > "$RUNNER_TEMP/windows/release-image.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: PC-Club-Admin-Windows-${{ github.sha }}
+          path: ${{ runner.temp }}/windows/
+          if-no-files-found: error
+          retention-days: 30
