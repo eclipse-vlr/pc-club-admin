@@ -58,6 +58,8 @@ services:
         condition: service_healthy
   api:
     <<: *app
+    # Docker needs a non-internal bridge to publish even a loopback-only port.
+    networks: [backend, access]
     ports: ['127.0.0.1:${STAGING_HTTP_PORT:-18080}:8080']
     depends_on:
       db:
@@ -66,5 +68,6 @@ services:
 networks:
   backend:
     internal: true
+  access:
 volumes:
   staging_postgres_data:

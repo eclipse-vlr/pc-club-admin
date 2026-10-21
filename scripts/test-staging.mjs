@@ -50,6 +50,8 @@ try {
   assert.equal(config.services.api.ports[0].target, 8080);
   assert.equal(config.services.db.ports, undefined);
   assert.equal(config.networks.backend.internal, true);
+  assert.ok(Object.hasOwn(config.services.api.networks, 'access'));
+  assert.equal(config.services.db.networks.access, undefined);
   assert.equal(config.services.api.stop_grace_period, '30s');
   assert.equal(config.services.api.logging.options['max-size'], '10m');
   const expectedImageID = await run(['image', 'inspect', '--format', '{{.Id}}', image]);
