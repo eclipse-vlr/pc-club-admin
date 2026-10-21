@@ -51,6 +51,45 @@ func TestNetChangeDoesNotDoubleSubtract(t *testing.T) {
 		t.Fatal("explicit extra refund missing")
 	}
 }
+
+func TestExactCashAtZeroAndOneKopeck(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		opening int64
+		counted *int64
+		blocker string
+		diff    *int64
+	}{
+		{"explicit_zero", 0, money(0), "", money(0)},
+		{"blank_is_not_zero", 0, nil, "CASH_INPUT_MISSING", nil},
+		{"extra_kopeck_at_zero", 0, money(1), "CASH_MISMATCH", money(1)},
+		{"one_kopeck_short", 100, money(99), "CASH_MISMATCH", money(-1)},
+		{"one_kopeck_extra", 100, money(101), "CASH_MISMATCH", money(1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result := Evaluate(Session{Opening: tc.opening, Langame: money(0), Refunds: money(0), Expenses: money(0), Counted: tc.counted, Policy: PolicyVersion})
+			if result.Verified {
+				t.Error("Evaluate(draft policy).Verified = true, want false")
+			}
+			if tc.blocker == "" {
+				if len(result.Blockers) != 0 {
+					t.Errorf("Evaluate(%s).Blockers = %v, want empty", tc.name, result.Blockers)
+				}
+			} else if !has(result, tc.blocker) {
+				t.Errorf("Evaluate(%s).Blockers = %v, want %s", tc.name, result.Blockers, tc.blocker)
+			}
+			if tc.diff == nil {
+				if result.Difference != nil {
+					t.Errorf("Evaluate(%s).Difference = %d, want nil", tc.name, *result.Difference)
+				}
+			} else if result.Difference == nil || *result.Difference != *tc.diff {
+				t.Errorf("Evaluate(%s).Difference = %v, want %d", tc.name, result.Difference, *tc.diff)
+			}
+		})
+	}
+}
 func TestMoneyBoundsAndCancellation(t *testing.T) {
 	s := Session{Opening: math.MaxInt64, Langame: money(1), Refunds: money(0), Expenses: money(0), Counted: money(0), Policy: PolicyVersion}
 	if !has(Evaluate(s), "CASH_OVERFLOW") {
