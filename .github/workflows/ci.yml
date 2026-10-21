@@ -16,11 +16,13 @@ jobs:
         run: |
           .\scripts\test-demo.ps1
           .\scripts\test-update.ps1
+          .\scripts\test-container-launcher.ps1
       - name: PowerShell 7 launcher checks (no application)
         shell: pwsh
         run: |
           .\scripts\test-demo.ps1
           .\scripts\test-update.ps1
+          .\scripts\test-container-launcher.ps1
   foundation:
     runs-on: ubuntu-24.04
     services:
@@ -111,3 +113,63 @@ jobs:
           curl --fail http://127.0.0.1:8080/readyz
           curl --fail http://127.0.0.1:8080/api/v1/status
           curl --fail http://127.0.0.1:8080/ | grep 'lang="ru"'
+      - name: Export the tested image for publication
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker image save --output "$RUNNER_TEMP/pc-club-image.tar" pc-club-admin:local
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: tested-image-${{ github.sha }}
+          path: ${{ runner.temp }}/pc-club-image.tar
+          if-no-files-found: error
+          retention-days: 1
+  publish-image:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'eclipse-vlr/pc-club-admin'
+    needs: [foundation, windows-launcher]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: publish-image-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tested-image-${{ github.sha }}
+          path: ${{ runner.temp }}/tested-image
+          digest-mismatch: error
+      - name: Publish the exact image that passed CI
+        id: image
+        env:
+          REGISTRY_USERNAME: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          docker image load --input "$RUNNER_TEMP/tested-image/pc-club-image.tar"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' pc-club-admin:local)" = "$GITHUB_SHA"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.source"}}' pc-club-admin:local)" = "https://github.com/eclipse-vlr/pc-club-admin"
+          image=ghcr.io/eclipse-vlr/pc-club-admin
+          tag="$image:sha-$GITHUB_SHA"
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$REGISTRY_USERNAME" --password-stdin
+          trap 'docker logout ghcr.io >/dev/null 2>&1' EXIT
+          docker image tag pc-club-admin:local "$tag"
+          docker image push "$tag"
+          reference=$(docker image inspect --format '{{index .RepoDigests 0}}' "$tag")
+          [[ "$reference" =~ ^ghcr.io/eclipse-vlr/pc-club-admin@sha256:[0-9a-f]{64}$ ]]
+          printf 'reference=%s\n' "$reference" >> "$GITHUB_OUTPUT"
+          printf '### Tested container image\n\n<code>%s</code>\n\nWindows first launch:\n\n    .\\scripts\\start-container.ps1 -Image %s\n\nRequires Docker Desktop with Linux containers. Test data only; Drive is disabled.\n\nA new GHCR package may be private. Its owner must set the package visibility to Public before anonymous downloads work.\n' "$reference" "$reference" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.19.0'
+      - name: Pull and test the published digest
+        # This check uses the runtime just downloaded from GHCR, not a new build.
+        env:
+          PC_CLUB_TEST_IMAGE: ${{ steps.image.outputs.reference }}
+        run: |
+          docker image pull "$PC_CLUB_TEST_IMAGE"
+          node scripts/test-staging.mjs
