@@ -2,6 +2,11 @@
 [CmdletBinding()]
 param(
     [string]$Image = '',
+    [switch]$Update,
+    [string]$ExcelFileId = '',
+    [string]$ExcelCredentialsFile = '',
+    [string]$ConfirmTestFileId = '',
+    [switch]$DisableExcel,
     [switch]$BootstrapManager,
     [switch]$NoBrowser
 )
@@ -66,12 +71,21 @@ try {
     $existing = Test-Path -LiteralPath $configuration
     if ($existing -and -not (Test-Path -LiteralPath $configuration -PathType Leaf)) { throw 'По пути настроек находится не файл.' }
     $settings = $null
+    $pendingUpdate = $false
+    . (Join-Path $PSScriptRoot 'container-excel.ps1')
+    $excel = Get-ExcelSettings -FileId $ExcelFileId -CredentialsFile $ExcelCredentialsFile -ConfirmFileId $ConfirmTestFileId -Disabled:$DisableExcel
     if ($existing) {
         $settings = Read-ContainerSettings
-        if ($Image -and $Image -cne $settings.STAGING_IMAGE) {
-            throw 'Сохранённая версия образа не изменена. Перед обновлением создайте резервную копию и выполните инструкцию обновления.'
+        if ($Update -and -not $Image) {
+            $release = Get-Item -LiteralPath (Join-Path $root 'release-image.txt') -Force
+            if ($release.PSIsContainer -or ($release.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $release.Length -gt 256) { throw 'Нужен файл версии нового установочного пакета.' }
+            $Image = [IO.File]::ReadAllText($release.FullName).Trim()
         }
-        $Image = $settings.STAGING_IMAGE
+        if ($Image -and $Image -cne $settings.STAGING_IMAGE) {
+            if (-not $Update) { throw 'Для обновления используйте Update: он сначала сохранит резервную копию БД и исходных настроек.' }
+            $pendingUpdate = $true
+        }
+        if (-not $pendingUpdate) { $Image = $settings.STAGING_IMAGE }
     } elseif (-not $Image -and (Test-Path -LiteralPath (Join-Path $root 'release-image.txt') -PathType Leaf)) {
         $manifest = Get-Item -LiteralPath (Join-Path $root 'release-image.txt') -Force
         if (($manifest.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $manifest.Length -gt 256) {
@@ -85,7 +99,8 @@ try {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Установите и запустите Docker Desktop с контейнерами Linux.' }
     # Always address the local engine; preserve credentials and restore caller selectors.
     foreach ($name in @('DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH',
-                        'STAGING_IMAGE', 'STAGING_DB_PASSWORD', 'STAGING_PIN_PEPPER', 'STAGING_TIMEZONE', 'STAGING_HTTP_PORT')) {
+                        'STAGING_IMAGE', 'STAGING_DB_PASSWORD', 'STAGING_PIN_PEPPER', 'STAGING_TIMEZONE', 'STAGING_HTTP_PORT',
+                        'STAGING_EXCEL_FILE_ID', 'STAGING_EXCEL_CREDENTIALS_FILE')) {
         $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
         [Environment]::SetEnvironmentVariable($name, $null, 'Process')
     }
@@ -137,6 +152,7 @@ try {
         $settings = Read-ContainerSettings
     }
     foreach ($key in $settings.Keys) { [Environment]::SetEnvironmentVariable($key, $settings[$key], 'Process') }
+    $env:STAGING_IMAGE = $Image
     $compose = @('compose', '--project-name', 'pc-club-staging', '--env-file', $configuration, '-f', $composeFile)
     $rendered = Invoke-LocalDocker -Arguments ($compose + @('--profile', 'tools', 'config', '--format', 'json')) -Failure 'Некорректная конфигурация тестового контура.'
     $effective = $rendered | ConvertFrom-Json
@@ -165,7 +181,52 @@ try {
         [int]$effective.services.api.ports[0].published -ne [int]$settings.STAGING_HTTP_PORT) {
         throw 'Compose должен использовать собственный том базы и API только на локальном адресе.'
     }
+    if ($null -ne $excel) {
+        $env:STAGING_EXCEL_FILE_ID = $excel.file_id
+        $env:STAGING_EXCEL_CREDENTIALS_FILE = $excel.credentials_path
+        $compose += @('-f', (Join-Path $root 'deploy/compose.excel-test.yaml'))
+        $rendered = Invoke-LocalDocker -Arguments ($compose + @('--profile', 'tools', 'config', '--format', 'json')) -Failure 'Некорректная конфигурация тестового Excel.'
+        $withExcel = $rendered | ConvertFrom-Json
+        foreach ($serviceName in @('db', 'migrate', 'admin')) {
+            if (($withExcel.services.$serviceName | ConvertTo-Json -Depth 32 -Compress) -cne
+                ($effective.services.$serviceName | ConvertTo-Json -Depth 32 -Compress)) {
+                throw 'Подключение Excel не должно менять базу, миграции или настройку пользователей.'
+            }
+        }
+        if ($withExcel.name -cne $effective.name -or
+            ($withExcel.volumes | ConvertTo-Json -Depth 32 -Compress) -cne ($effective.volumes | ConvertTo-Json -Depth 32 -Compress) -or
+            ($withExcel.services.api.ports | ConvertTo-Json -Depth 32 -Compress) -cne ($effective.services.api.ports | ConvertTo-Json -Depth 32 -Compress) -or
+            $withExcel.services.api.environment.CASH_POLICY_STATUS -cne 'unverified' -or
+            $withExcel.services.api.environment.PIN_PEPPER -cne $settings.STAGING_PIN_PEPPER -or
+            $withExcel.services.api.environment.DATABASE_URL -cne $effective.services.api.environment.DATABASE_URL) {
+            throw 'Подключение Excel не должно менять изоляцию и денежную политику тестовой установки.'
+        }
+        foreach ($serviceName in @('api', 'excel-check')) {
+            $service = $withExcel.services.$serviceName
+            if ($service.image -cne $Image -or $service.environment.APP_ENV -cne 'test' -or
+                $service.volumes.Count -ne 1 -or $service.volumes[0].type -cne 'bind' -or
+                -not $service.volumes[0].read_only -or $service.volumes[0].target -cne '/run/secrets/pcclub-excel.json' -or
+                $service.volumes[0].source.Replace('\', '/') -cne $excel.credentials_path -or
+                ($service.volumes[0].bind.PSObject.Properties['create_host_path'] -and $service.volumes[0].bind.create_host_path)) {
+                throw 'Ключ Excel должен подключаться только для чтения к тестовому API и проверке доступа.'
+            }
+        }
+        if ($withExcel.services.api.environment.DRIVE_EXCEL_SYNC -cne 'test' -or
+            $withExcel.services.api.environment.DRIVE_EXCEL_FILE_ID -cne $excel.file_id -or
+            $withExcel.services.api.environment.DRIVE_EXCEL_CREDENTIALS_FILE -cne '/run/secrets/pcclub-excel.json') {
+            throw 'Некорректный режим тестового Excel.'
+        }
+        if ($ExcelFileId) {
+            Write-Host 'Проверяю доступ сервисного аккаунта и XLSX без изменения файла...'
+            Invoke-LocalDocker -Arguments ($compose + @('run', '--rm', '-T', '--no-deps', 'excel-check')) -Failure 'Проверка Excel не пройдена. Проверьте JSON-ключ, доступ сервисного аккаунта и шаблон тестовой копии. Режим не изменён.' | Out-Null
+            Save-ExcelSettings -Settings $excel
+        }
+    }
     Invoke-LocalDocker -Arguments ($compose + @('up', '-d', '--wait', '--wait-timeout', '90', 'db')) -Failure 'Тестовая база не стала доступной.' | Out-Null
+    if ($pendingUpdate) {
+        . (Join-Path $PSScriptRoot 'container-update.ps1')
+        Backup-ContainerBeforeUpdate -Compose $compose -Settings $settings -TargetImage $Image
+    }
     Invoke-LocalDocker -Arguments ($compose + @('run', '--rm', '-T', 'migrate')) -Failure 'Миграция не выполнена. Настройки и база сохранены.' | Out-Null
     $userState = Invoke-LocalDocker -Arguments ($compose + @('exec', '-T', 'db', 'psql', '-U', 'pcclub_staging', '-d', 'pcclub_staging', '-At', '-v', 'ON_ERROR_STOP=1', '-c', 'SELECT EXISTS (SELECT 1 FROM users)')) -Failure 'Не удалось проверить состояние первой настройки.'
     $userState = $userState.Trim()
@@ -179,11 +240,16 @@ try {
     $origin = 'http://127.0.0.1:' + $settings.STAGING_HTTP_PORT
     $null = Invoke-RestMethod -Uri ($origin + '/readyz') -TimeoutSec 5
     $status = Invoke-RestMethod -Uri ($origin + '/api/v1/status') -TimeoutSec 5
-    if ($status.environment -cne 'test' -or $status.cash_policy_status -cne 'unverified' -or $status.excel_sync_enabled -ne $false) {
+    if ($status.environment -cne 'test' -or $status.cash_policy_status -cne 'unverified' -or $status.excel_sync_enabled -ne ($null -ne $excel)) {
         throw 'Приложение не подтвердило отдельный тестовый режим.'
     }
+    if ($DisableExcel -and (Test-Path -LiteralPath (Join-Path $root 'deploy/.excel.staging.json'))) {
+        Remove-Item -LiteralPath (Join-Path $root 'deploy/.excel.staging.json') -Force
+    }
     Write-Host "Тестовая версия готова: $origin"
-    Write-Host 'Логин: manager. Только вымышленные данные; кассовый расчёт предварительный; Drive выключен.'
+    Write-Host 'Логин: manager. Только вымышленные данные; кассовый расчёт предварительный.'
+    if ($null -ne $excel) { Write-Host 'Автозаполнение тестового Excel включено. Статус доставки смотрите внутри смены.' }
+    else { Write-Host 'Автозаполнение Excel выключено.' }
     if (-not $NoBrowser) { Start-Process $origin }
 } finally {
     if ($lock) { $lock.Dispose() }
