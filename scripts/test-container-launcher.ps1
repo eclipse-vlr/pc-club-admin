@@ -70,6 +70,7 @@ function Invoke-RestMethod {
     return @{environment='test';cash_policy_status='unverified';excel_sync_enabled=$false}
 }
 function Start-Process { throw 'Tests must not open a browser.' }
+function Read-Host { throw 'The packaged release must not ask the operator to choose a digest.' }
 $saved = @{}
 foreach ($key in @('DOCKER_HOST','DOCKER_CONTEXT','DOCKER_TLS_VERIFY','STAGING_IMAGE')) {
     $saved[$key]=[Environment]::GetEnvironmentVariable($key,'Process')
@@ -81,6 +82,7 @@ try {
     [IO.File]::WriteAllText((Join-Path $fixture 'deploy/compose.staging.yaml'), 'synthetic intercepted fixture')
     [IO.File]::WriteAllText((Join-Path $fixture '.env'), 'synthetic-existing-development-settings')
     [IO.File]::WriteAllText((Join-Path $fixture '.demo.local.json'), 'synthetic-existing-drive-settings')
+    [IO.File]::WriteAllText((Join-Path $fixture 'release-image.txt'), $image)
     $global:PCClubContainerFixture.ExpectedHost = if ($env:OS -eq 'Windows_NT') { 'npipe:////./pipe/dockerDesktopLinuxEngine' } else { 'unix:///var/run/docker.sock' }
     $env:DOCKER_HOST='tcp://example.invalid:2376'; $env:DOCKER_CONTEXT='remote';$env:DOCKER_TLS_VERIFY='1';$env:STAGING_IMAGE='untrusted:latest'
     foreach ($invalid in @('ghcr.io/eclipse-vlr/pc-club-admin:latest', 'ghcr.io/other/project@sha256:' + ('a'*64), $image.ToUpperInvariant())) {
@@ -94,7 +96,7 @@ try {
         Assert-Container (-not ($global:PCClubContainerFixture.Calls -match 'run --rm|up -d')) 'Preflight failure reached the database.'
     }
     $global:PCClubContainerFixture.Mode='';$global:PCClubContainerFixture.Calls=@()
-    $output = (& $launcher -Image $image -NoBrowser *>&1 | Out-String)
+    $output = (& $launcher -NoBrowser *>&1 | Out-String)
     Assert-Container (Test-Path -LiteralPath $file) 'First launch did not create settings.'
     $original = [IO.File]::ReadAllBytes($file)
     $text = [IO.File]::ReadAllText($file)

@@ -1,6 +1,7 @@
 .git
 docs
 deploy/.container-start.lock
+release-image.txt
 .env
 .env.*
 **/.env
