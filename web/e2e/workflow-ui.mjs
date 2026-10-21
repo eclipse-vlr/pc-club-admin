@@ -22,6 +22,7 @@ let patches = 0;
 let lostResponse = false;
 let rejectNextReadiness = false;
 let failReadinessAfterSave = false;
+let mismatchedReadiness = false;
 let noteRequired = false;
 let rejectShiftRead = false;
 let notePosts = 0;
@@ -39,7 +40,7 @@ function readiness() {
   const acceptance = phase('acceptance'); const closing = phase('closing');
   const blockers = [...acceptance.blockers, ...closing.blockers];
   if (shift.cash.summary.difference_kopecks !== '0') blockers.push({ code: 'CASH_MISMATCH', message: 'Расхождение кассы: 1 ₽. Сдать смену нельзя.' });
-  return { acceptance, closing, blockers, can_activate: false, can_prepare_handover: blockers.length === 0 };
+  return { version: shift.version + (mismatchedReadiness ? 1 : 0), acceptance, closing, blockers, can_activate: false, can_prepare_handover: blockers.length === 0 };
 }
 const browser = await chromium.launch({ executablePath: process.env.PC_CLUB_CHROMIUM || '/usr/bin/chromium', args: ['--no-sandbox'] });
 try {
@@ -128,6 +129,13 @@ try {
   assert.ok(await prepare.isEnabled(), 'only saved server readiness enables preparation');
   delivered = shift.version; await page.getByRole('button', { name: 'Обновить статус Excel', exact: true }).click();
   await excel.getByText('Сохранённые ответы отправлены в Excel.', { exact: true }).waitFor();
+  mismatchedReadiness = true;
+  await page.getByRole('button', { name: 'Перечитать сохранённые данные', exact: true }).click();
+  await page.getByRole('alert').filter({ hasText: 'Смена изменилась в другом окне' }).waitFor();
+  assert.ok(await prepare.isDisabled(), 'readiness for another snapshot cannot authorize the shown shift');
+  mismatchedReadiness = false;
+  await page.getByRole('button', { name: 'Перечитать сохранённые данные', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('button[aria-describedby="prepare-blockers"]'));
   await first.locator('summary').click(); await first.locator('textarea').fill('Подтверждённая запись, ошибка readiness'); failReadinessAfterSave = true;
   await first.getByRole('button', { name: 'Сохранить ответ', exact: true }).click();
   await storage.getByText('Ответы сохранены в приложении.', { exact: true }).waitFor();

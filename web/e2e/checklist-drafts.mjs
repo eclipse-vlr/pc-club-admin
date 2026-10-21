@@ -53,7 +53,7 @@ try {
           '/api/v1/auth/csrf': { csrf_token: 'synthetic-csrf' },
           '/api/v1/shifts/current': { shift },
           ['/api/v1/shifts/' + shift.id]: shift,
-          ['/api/v1/shifts/' + shift.id + '/readiness']: { acceptance: { completed: 2 - blockers.length, total: 2, blockers }, closing: { completed: 0, total: 0, blockers: [] }, blockers, can_activate: blockers.length === 0, can_prepare_handover: false },
+          ['/api/v1/shifts/' + shift.id + '/readiness']: { version: shift.version, acceptance: { completed: 2 - blockers.length, total: 2, blockers }, closing: { completed: 0, total: 0, blockers: [] }, blockers, can_activate: blockers.length === 0, can_prepare_handover: false },
         };
         if (Object.hasOwn(fixtures, url.pathname)) { await route.fulfill({ json: fixtures[url.pathname] }); return; }
       }
