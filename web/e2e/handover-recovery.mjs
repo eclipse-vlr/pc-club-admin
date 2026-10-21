@@ -46,7 +46,7 @@ try {
           '/auth/csrf': { csrf_token: 'synthetic' },
           '/shifts/current': { shift },
           ['/handovers/' + hID]: handover,
-          ['/shifts/' + shift.id + '/readiness']: { acceptance: { completed: 12, total: 12, blockers: [] }, closing: { completed: 0, total: 19, blockers: [] }, blockers: [], can_activate: false, can_prepare_handover: false },
+          ['/shifts/' + shift.id + '/readiness']: { version: shift.version, acceptance: { completed: 12, total: 12, blockers: [] }, closing: { completed: 0, total: 19, blockers: [] }, blockers: [], can_activate: false, can_prepare_handover: false },
         };
         if (Object.hasOwn(fixtures, endpoint)) { await route.fulfill({ json: fixtures[endpoint] }); return; }
       }

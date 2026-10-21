@@ -33,7 +33,7 @@ try {
         '/api/v1/auth/admin-options': [user],
         '/api/v1/auth/csrf': { csrf_token: 'synthetic-csrf' },
         '/api/v1/shifts/current': { shift },
-        ['/api/v1/shifts/' + shift.id + '/readiness']: { acceptance: { completed: 12, total: 12, blockers: [] }, closing: { completed: 0, total: 19, blockers: [] }, blockers: [] },
+        ['/api/v1/shifts/' + shift.id + '/readiness']: { version: shift.version, acceptance: { completed: 12, total: 12, blockers: [] }, closing: { completed: 0, total: 19, blockers: [] }, blockers: [] },
       };
       if (url.pathname === '/api/v1/shifts/' + shift.id + '/excel-sync') {
         await route.fulfill({ status: rejected ? 401 : 200, json: rejected ? { error: { code: 'AUTH_REQUIRED' } } : state }); return;

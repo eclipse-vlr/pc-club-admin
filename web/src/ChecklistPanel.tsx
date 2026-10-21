@@ -15,7 +15,7 @@ type Entry = { code: string; phase: string; label: string; help_text: string; an
 type Note = { id: string; checklist_code: string; category: string; object_label: string; text: string; version: number };
 type Shift = { handover_id:string;handover_parent_id:string; id: string; owner_id: string; status: string; kind: string; business_date: string; template_version: number; version: number; planned_start_at: string; planned_end_at: string; checklist: Entry[]; notes: Note[]; cash: CashView | null };
 type Progress = { completed: number; total: number; blockers: Blocker[] };
-type Readiness = { acceptance: Progress; closing: Progress; blockers: Blocker[]; can_activate: boolean; can_prepare_handover: boolean };
+type Readiness = { version: number; acceptance: Progress; closing: Progress; blockers: Blocker[]; can_activate: boolean; can_prepare_handover: boolean };
 
 export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }: { identity: Identity; users: User[];excelSyncEnabled:boolean;onSessionEnd:()=>Promise<Identity | null> }) {
   const [shift, setShift] = useState<Shift | null>(null);
@@ -66,6 +66,7 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
     setShift(result); setReady(null);
     const readiness = await api<Readiness>('/shifts/' + result.id + '/readiness');
     if (current()) {
+      if (readiness.version !== result.version) throw new APIError('VERSION_CONFLICT', 'Смена изменилась в другом окне. Перечитайте сохранённые данные.', 409);
       completedVersions.current.clear();
       for (const entry of result.checklist) {
         const progress = entry.phase === 'acceptance' ? readiness.acceptance : readiness.closing;
