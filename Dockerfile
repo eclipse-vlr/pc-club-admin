@@ -21,6 +21,9 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/api ./cmd/api && \
     CGO_ENABLED=0 go build -trimpath -o /out/healthcheck ./cmd/healthcheck
 
 FROM debian:bookworm-slim
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.source="https://github.com/eclipse-vlr/pc-club-admin" \
+      org.opencontainers.image.revision=$SOURCE_REVISION
 COPY --from=backend /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 WORKDIR /app
 COPY --from=backend /out/ /app/

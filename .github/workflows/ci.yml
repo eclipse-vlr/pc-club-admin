@@ -81,9 +81,11 @@ jobs:
           node web/e2e/handover-recovery.mjs
       - name: Build deployment image and validate isolated runtime
         run: |
-          docker build -t pc-club-admin:local .
+          node scripts/test-staging-config.mjs
+          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" -t pc-club-admin:local .
           docker pull caddy:2.11.2-alpine
           node scripts/test-container.mjs
+          node scripts/test-staging.mjs
       - name: Browser setup, handover, history and remote manager
         env:
           PC_CLUB_BROWSER_TEST: '1'

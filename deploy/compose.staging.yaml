@@ -1,0 +1,70 @@
+# Separate disposable-data installation. Never use the club's production database.
+name: pc-club-staging
+x-app: &app
+  image: ${STAGING_IMAGE:?Run node scripts/init-staging.mjs first}
+  pull_policy: never
+  environment:
+    APP_ENV: test
+    HTTP_ADDR: 0.0.0.0:8080
+    APP_ORIGIN: http://127.0.0.1:${STAGING_HTTP_PORT:-18080}
+    DATABASE_URL: postgres://pcclub_staging:${STAGING_DB_PASSWORD:?Set the generated staging password}@db/pcclub_staging?sslmode=disable
+    PIN_PEPPER: ${STAGING_PIN_PEPPER:?Keep the generated staging secret}
+    CLUB_TIMEZONE: ${STAGING_TIMEZONE:-Europe/Moscow}
+    CASH_POLICY_STATUS: unverified
+    DRIVE_EXCEL_SYNC: disabled
+  networks: [backend]
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  stop_grace_period: 30s
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+services:
+  db:
+    image: postgres:17.6-bookworm
+    environment:
+      POSTGRES_USER: pcclub_staging
+      POSTGRES_DB: pcclub_staging
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:?Set the generated staging password}
+    volumes: [staging_postgres_data:/var/lib/postgresql/data]
+    networks: [backend]
+    healthcheck:
+      test: [CMD-SHELL, 'test "$$(head -n 1 /var/lib/postgresql/data/postmaster.pid 2>/dev/null)" = 1 && pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: *logging
+  migrate:
+    <<: *app
+    entrypoint: [/app/migrate]
+    command: [up]
+    profiles: [tools]
+    depends_on:
+      db:
+        condition: service_healthy
+  admin:
+    <<: *app
+    entrypoint: [/app/admin]
+    profiles: [tools]
+    stdin_open: true
+    tty: true
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    <<: *app
+    ports: ['127.0.0.1:${STAGING_HTTP_PORT:-18080}:8080']
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+networks:
+  backend:
+    internal: true
+volumes:
+  staging_postgres_data:
