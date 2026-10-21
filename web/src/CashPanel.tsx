@@ -3,14 +3,16 @@ import type { FormEvent } from 'react';
 import { api, APIError } from './api';
 import type { Identity } from './api';
 import { formatRubles, parseRubles, rublesInput, stringifyExact } from './money';
+import { ActionRequirements } from './BlockerList';
+import type { Blocker } from './BlockerList';
 
 type Movement = { id: string; kind: string; amount_kopecks: string; reversal_of: string | null; reason: string; recipient: string; occurred_at: string };
 export type CashView = {
   session: { version: number; opening_cash_kopecks: string;counted_opening_kopecks:string|null;opening_confirmed_at:string|null; langame_cash_amount_kopecks: string | null; extra_cash_refunds_kopecks: string | null; extra_cash_expenses_kopecks: string | null; counted_closing_kopecks: string | null; movements: Movement[] };
   summary: { expected_closing_kopecks: string | null; difference_kopecks: string | null; collection_total_kopecks: string | null; policy_version: string; verified: boolean; blockers: { code: string; message: string }[] };
 };
-type Props = { identity: Identity; shift: { id: string; owner_id: string; status: string; version: number; cash?: CashView | null }; readyToActivate: boolean; refresh: () => Promise<void> };
-export function CashPanel({ identity, shift, readyToActivate, refresh }: Props) {
+type Props = { identity: Identity; shift: { id: string; owner_id: string; status: string; version: number; cash?: CashView | null }; draftsPending: boolean; readyToActivate: boolean; activationBlockers: Blocker[]; onNavigate: (blocker: Blocker) => void; refresh: () => Promise<void> };
+export function CashPanel({ identity, shift, readyToActivate, refresh, draftsPending, activationBlockers, onNavigate }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [uncertain, setUncertain] = useState(false);
@@ -37,7 +39,7 @@ export function CashPanel({ identity, shift, readyToActivate, refresh }: Props) 
   }
   async function submit(event: FormEvent<HTMLFormElement>, work: (data: FormData) => Promise<void>) {
     event.preventDefault();
-    if (inFlight.current || needsRead.current) return;
+    if (inFlight.current || needsRead.current || draftsPending) return;
     inFlight.current = true;
     const form = event.currentTarget; const data = new FormData(form);
     form.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
@@ -50,7 +52,7 @@ export function CashPanel({ identity, shift, readyToActivate, refresh }: Props) 
       needsRead.current = true;
     } finally { inFlight.current = false; setBusy(false); }
   }
-  const disabled = busy || uncertain;
+  const disabled = busy || uncertain || draftsPending;
   const pin = <label>Личный PIN для этого действия<input name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="off" /></label>;
   return <div className="cash-panel" id="shift-cash" tabIndex={-1}>
     <h3>Тестовый расчёт кассы · {summary.policy_version}</h3>
@@ -64,7 +66,8 @@ export function CashPanel({ identity, shift, readyToActivate, refresh }: Props) 
     })}>
       <h4>Лично принять первую смену · Test-mode</h4>
       <p>Требуется весь чек-лист приёма, собственный пересчёт и PIN. Начальная сумма от управляющего не считается принятой автоматически.</p>
-      <label>Мой пересчёт в рублях<input name="counted" inputMode="decimal" required /></label>{pin}<button disabled={disabled || !readyToActivate}>Подтвердить первый приём</button>
+      <label>Мой пересчёт в рублях<input name="counted" inputMode="decimal" required /></label>{pin}<button disabled={disabled || !readyToActivate} aria-describedby={activationBlockers.length ? 'activate-blockers' : undefined}>Подтвердить первый приём</button>
+      <ActionRequirements id="activate-blockers" blockers={activationBlockers} onNavigate={onNavigate} />
     </form>}
     {editable && shift.status === 'active' && <>
       <form onSubmit={event => void submit(event, async data => {

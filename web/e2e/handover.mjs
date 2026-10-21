@@ -49,10 +49,10 @@ try{
  });
  await prepare.locator('select[name="receiver"]').selectOption(process.env.PC_CLUB_E2E_RECEIVER);
  await prepare.getByLabel('Мой личный PIN',{exact:true}).fill('123456');
- await prepare.getByRole('button').click();
+ await prepare.getByRole('button',{name:'Подготовить передачу и выйти',exact:true}).click();
  const transferPanel=page.getByRole('region',{name:'Передача смены',exact:true});
  await transferPanel.getByRole('alert').filter({hasText:'Результат действия неизвестен'}).waitFor();
- assert.ok(await prepare.getByRole('button').isDisabled());
+ assert.ok(await prepare.getByRole('button',{name:'Подготовить передачу и выйти',exact:true}).isDisabled());
  await transferPanel.getByRole('button',{name:'Проверить сессию и перечитать передачу',exact:true}).click();
  await page.getByRole('heading',{level:1,name:'Вход в приложение'}).waitFor();
  await page.unroute('**/api/v1/shifts/*/handovers');
