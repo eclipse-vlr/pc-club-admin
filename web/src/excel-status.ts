@@ -28,7 +28,7 @@ const messages: Record<string, string> = {
 };
 
 export function excelDeliveryView(state: ExcelState | null, version: number, enabled: boolean, unavailable: boolean) {
-  if (!enabled) return { tone: 'is-disabled', sent: false, message: 'Автозаполнение Excel не подключено. Ответы сохранены в приложении.' };
+  if (!enabled) return { tone: 'is-disabled', sent: false, message: 'Автозаполнение Excel не подключено. Сохранённые ответы доступны в приложении.' };
   if (unavailable) return { tone: 'is-warning', sent: false, message: 'Не удалось проверить отправку в Excel. Обновите данные или войдите заново.' };
   if (!state) return { tone: 'is-pending', sent: false, message: 'Проверяем отправку в Excel…' };
   if (state.last_error_code) return { tone: 'is-warning', sent: false, message: messages[state.last_error_code] ?? 'Обновление Excel ожидает повторной отправки. Данные сохранены в приложении.' };

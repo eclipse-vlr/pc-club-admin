@@ -132,16 +132,17 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
       <ExcelSyncPanel key={shift.id} shiftID={shift.id} version={shift.version} enabled={excelSyncEnabled} />
       {!editable && <p>Просмотр без права изменения. Ответы заполняет назначенный администратор после личного PIN-входа.</p>}
       {ready && <div className="progress-grid" aria-label="Сохранённый прогресс чек-листов">{(['acceptance', 'closing'] as const).map(phase => <div className="progress-card" key={phase}><h3>{phase === 'acceptance' ? 'Приём смены' : 'Сдача смены'}<span>{ready[phase].completed} / {ready[phase].total}</span></h3><progress max={ready[phase].total || 1} value={ready[phase].completed} aria-label={phase === 'acceptance' ? 'Прогресс приёма' : 'Прогресс сдачи'} /><p>{ready[phase].blockers.length ? `Причин, требующих внимания: ${ready[phase].blockers.length}` : 'Обязательные пункты заполнены'}</p></div>)}</div>}
+      <nav className="shift-shortcuts" aria-label="Действия со сменой"><a href="#shift-acceptance">Приём</a><a href="#shift-closing">Сдача</a><a href="#shift-cash">Касса</a><a href="#shift-handover">Передача</a><a href="#shift-notes">Замечания</a></nav>
       <aside className="readiness-status">{ready ? ready.blockers.length ? <details><summary>Что осталось проверить: {ready.blockers.length}</summary><ul>{ready.blockers.map((blocker, index) => <li key={blocker.code + ':' + index}>
         {blocker.item_code ? <button type="button" className="blocker-link" onClick={() => { if (blocker.item_code) focusEntry(blocker.item_code); }}>{blocker.message}</button> : blocker.message}
         {blockerHint(blocker.code) && <p>{blockerHint(blocker.code)}</p>}
         {blocker.code === 'NOTE_REQUIRED' && <button type="button" className="blocker-link" onClick={() => focusSection('shift-notes')}>Перейти к замечаниям</button>}
         {(blocker.code.startsWith('CASH_') || blocker.code === 'OPENING_COUNT_REQUIRED') && shift.cash && <button type="button" className="blocker-link" onClick={() => focusSection('shift-cash')}>Перейти к кассе</button>}
       </li>)}</ul></details> : <p>По сохранённым данным блокирующих причин нет. Для ответственного действия потребуется личное подтверждение.</p> : <p>Проверка готовности ещё не получена.</p>}</aside>
-      {(['acceptance', 'closing'] as const).map(phase => <div className="checklist-phase" key={phase}>
+      {(['acceptance', 'closing'] as const).map(phase => <div className="checklist-phase" key={phase} id={'shift-' + phase} tabIndex={-1}>
         <h3>{phase === 'acceptance' ? 'Приём' : 'Сдача'}: {ready ? `${ready[phase].completed} из ${ready[phase].total}` : 'Проверяем…'}</h3>
         <button type="button" className="checklist-jump" disabled={busy || !ready?.[phase].blockers.some(blocker => blocker.item_code)} onClick={() => { const code = ready?.[phase].blockers.find(blocker => blocker.item_code)?.item_code; if (code) focusEntry(code); }}>К первому незавершённому пункту · {phase === 'acceptance' ? 'приём' : 'сдача'}</button>
-        <div className="checklist-grid">{shift.checklist.filter(entry => entry.phase === phase).map(entry => <EntryEditor key={generation + ':' + entry.code} entry={entry} disabled={busy || !editable || (phase === 'acceptance' ? shift.status !== 'opening' : shift.status !== 'active')} onDirty={changed => markDirty(entry.code, changed)} onSave={(data, version) => saveEntry(entry, data, version)} />)}</div>
+        <div className="checklist-grid">{shift.checklist.filter(entry => entry.phase === phase).map(entry => <EntryEditor complete={!!entry.answered_by && !!ready && !ready[phase].blockers.some(blocker => blocker.item_code === entry.code)} key={generation + ':' + entry.code} entry={entry} disabled={busy || !editable || (phase === 'acceptance' ? shift.status !== 'opening' : shift.status !== 'active')} onDirty={changed => markDirty(entry.code, changed)} onSave={(data, version) => saveEntry(entry, data, version)} />)}</div>
       </div>)}
       <fieldset className="shift-actions" disabled={dirtyCount > 0}><legend>Приём, касса и передача</legend>
       {!(shift.status==='opening'&&shift.handover_parent_id)&&<CashPanel key={"cash:" + generation + ":" + shift.id + ":" + shift.version} identity={identity} shift={shift} readyToActivate={ready?.can_activate === true} refresh={load} />}
@@ -160,7 +161,7 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
     </>}
   </section>;
 }
-function EntryEditor({ entry, disabled, onSave, onDirty }: { entry: Entry; disabled: boolean; onSave: (data: FormData, version: number) => Promise<Entry>; onDirty: (changed: boolean) => void }) {
+function EntryEditor({ entry, disabled, complete, onSave, onDirty }: { entry: Entry; disabled: boolean; complete: boolean; onSave: (data: FormData, version: number) => Promise<Entry>; onDirty: (changed: boolean) => void }) {
   const [baseline, setBaseline] = useState(entry);
   const [draft, setDraft] = useState(entry);
   const [state, setState] = useState(entry.answered_by ? 'Сохранено' : 'Не заполнено');
@@ -179,7 +180,7 @@ function EntryEditor({ entry, disabled, onSave, onDirty }: { entry: Entry; disab
     try { const saved = await onSave(data, baseline.version); setBaseline(saved); setDraft(saved); onDirty(false); setState('Сохранено'); }
     catch { setState('Ошибка. Перечитайте данные перед повтором.'); setUncertain(true); }
   }
-  return <form id={'checklist-' + entry.code} tabIndex={-1} aria-label={entry.label} className="checklist-item" data-checklist-dirty={changed ? 'true' : undefined} onSubmit={event => void save(event)}>
+  return <form id={'checklist-' + entry.code} tabIndex={-1} aria-label={entry.label} className="checklist-item" data-complete={complete && !uncertain && !changed} data-checklist-dirty={changed ? 'true' : undefined} onSubmit={event => void save(event)}>
     <fieldset disabled={disabled || uncertain}>
       <legend>{entry.label}</legend>
       {entry.help_text && <p>{entry.help_text}</p>}

@@ -64,6 +64,8 @@ try{
  await page.locator('select[name="user"]').selectOption(owner);
  await page.getByLabel('Личный PIN',{exact:true}).fill('111111');await page.getByRole('button',{name:'Войти по PIN',exact:true}).click();
  await page.getByRole('alert').filter({hasText:'Неверные данные входа'}).waitFor();
+ assert.equal(await page.locator('select[name="user"]').inputValue(),owner,'failed PIN login keeps the selected employee');
+ assert.equal(await page.getByLabel('Личный PIN',{exact:true}).inputValue(),'','failed PIN is cleared');
  await page.locator('select[name="user"]').selectOption(owner);await page.getByLabel('Личный PIN',{exact:true}).fill('222222');
  await page.getByRole('button',{name:'Войти по PIN',exact:true}).click();
  await page.getByRole('heading',{level:1,name:'Первый администратор E2E'}).waitFor();
