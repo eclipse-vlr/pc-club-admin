@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, chmod } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,7 +23,7 @@ function run(args, input) {
     child.stdout.on('data', chunk => output += chunk);
     child.stderr.on('data', chunk => error += chunk);
     child.once('error', reject);
-    child.once('close', code => code === 0 ? resolve(output.trim()) : reject(new Error('Isolated staging command failed: ' + error)));
+    child.once('close', code => code === 0 ? resolve(output.trim()) : reject(new Error('Isolated staging command failed: ' + error + output)));
     child.stdin.on('error', () => {});
     child.stdin.end(input);
   });
@@ -54,6 +54,23 @@ try {
   assert.equal(config.services.db.networks.access, undefined);
   assert.equal(config.services.api.stop_grace_period, '30s');
   assert.equal(config.services.api.logging.options['max-size'], '10m');
+  // Exercise the packaged checker and an actual read-only bind without any
+  // Google request. An invalid local JSON must fail before OAuth/network I/O.
+  const syntheticKey = path.join(directory, 'synthetic key.json');
+  await writeFile(syntheticKey, '{"not":"a service account"}', { mode: 0o644 });
+  // The session's umask may remove group/other reads from writeFile's mode.
+  // This is public synthetic text, not a key; let the non-root test container read it.
+  await chmod(syntheticKey, 0o644);
+  environment.STAGING_EXCEL_FILE_ID = 'synthetic-test-copy';
+  environment.STAGING_EXCEL_CREDENTIALS_FILE = syntheticKey;
+  const excelCompose = args => run([...base, '-f', 'deploy/compose.excel-test.yaml', ...args]);
+  const excelConfig = JSON.parse(await excelCompose(['--profile', 'tools', 'config', '--format', 'json']));
+  for (const service of ['api', 'excel-check']) {
+    assert.equal(excelConfig.services[service].volumes[0].read_only, true);
+    assert.equal(excelConfig.services[service].volumes[0].target, '/run/secrets/pcclub-excel.json');
+  }
+  await excelCompose(['run', '--rm', '-T', '--no-deps', '--entrypoint', '/bin/sh', 'excel-check', '-c', 'test -r /run/secrets/pcclub-excel.json && test "$(id -u)" = 10001']);
+  await assert.rejects(excelCompose(['run', '--rm', '-T', '--no-deps', 'excel-check']), /EXCEL_CONFIG_INVALID/);
   const expectedImageID = await run(['image', 'inspect', '--format', '{{.Id}}', image]);
   await compose(['up', '-d', '--wait', '--wait-timeout', '90', 'db']);
   const databaseID = await compose(['ps', '-q', 'db']);

@@ -25,9 +25,14 @@ function Backup-ContainerBeforeUpdate {
     try {
         Invoke-LocalDocker -Arguments ($Compose + @('exec', '-T', 'db', 'pg_dump', '-U', 'pcclub_staging', '-d', 'pcclub_staging', '--format=custom', ('--file=' + $remote))) -Failure 'Резервная копия БД не создана. Образ и настройки не изменены; повторно запустите прежнюю версию.' | Out-Null
         Invoke-LocalDocker -Arguments ($Compose + @('exec', '-T', 'db', 'pg_restore', '--list', $remote)) -Failure 'Архив БД не читается. Обновление отменено.' | Out-Null
+        $sourceHash = Invoke-LocalDocker -Arguments ($Compose + @('exec', '-T', 'db', 'sha256sum', $remote)) -Failure 'Не удалось проверить контрольную сумму архива в контейнере.'
+        if ($sourceHash -cnotmatch '^([0-9a-f]{64})\s') { throw 'Контейнер не подтвердил контрольную сумму архива. Обновление отменено.' }
+        $expectedHash = $matches[1]
         Invoke-LocalDocker -Arguments ($Compose + @('cp', ('db:' + $remote), $destination)) -Failure 'Не удалось сохранить архив БД на ПК. Обновление отменено.' | Out-Null
         if (-not (Test-Path -LiteralPath $destination -PathType Leaf) -or (Get-Item -LiteralPath $destination).Length -eq 0) { throw 'Резервная копия не подтверждена. Обновление отменено.' }
-        $manifest = @{ from_image=$Settings.STAGING_IMAGE; to_image=$TargetImage; database_sha256=(Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant() }
+        $copiedHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($copiedHash -cne $expectedHash) { throw 'Контрольные суммы архива в контейнере и на ПК различаются. Обновление отменено.' }
+        $manifest = @{ from_image=$Settings.STAGING_IMAGE; to_image=$TargetImage; database_sha256=$copiedHash }
         [IO.File]::WriteAllText((Join-Path $directory 'manifest.json'), ($manifest | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
     } finally {
         Invoke-LocalDocker -Arguments ($Compose + @('exec', '-T', 'db', 'rm', '-f', $remote)) -Failure 'Удалите временный архив из тестового контейнера после проверки резервной копии.' | Out-Null
