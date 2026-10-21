@@ -161,7 +161,11 @@ try {
     }
     Invoke-LocalDocker -Arguments ($compose + @('up', '-d', '--wait', '--wait-timeout', '90', 'db')) -Failure 'Тестовая база не стала доступной.' | Out-Null
     Invoke-LocalDocker -Arguments ($compose + @('run', '--rm', '-T', 'migrate')) -Failure 'Миграция не выполнена. Настройки и база сохранены.' | Out-Null
-    if (-not $existing -or $BootstrapManager) {
+    $userState = Invoke-LocalDocker -Arguments ($compose + @('exec', '-T', 'db', 'psql', '-U', 'pcclub_staging', '-d', 'pcclub_staging', '-At', '-v', 'ON_ERROR_STOP=1', '-c', 'SELECT EXISTS (SELECT 1 FROM users)')) -Failure 'Не удалось проверить состояние первой настройки.'
+    $userState = $userState.Trim()
+    if ($userState -cne 't' -and $userState -cne 'f') { throw 'База не подтвердила состояние первой настройки.' }
+    if ($BootstrapManager -and $userState -ceq 't') { throw 'Пользователи уже созданы; повторная инициализация запрещена.' }
+    if ($userState -ceq 'f') {
         Write-Host 'Создайте первого тестового управляющего. Введите новый пароль дважды по запросу.'
         Invoke-LocalDocker -Arguments ($compose + @('run', '--rm', 'admin', 'bootstrap-manager', '--login', 'manager', '--name', 'Управляющий тестового контура')) -Failure 'Создание управляющего не завершено. Сохраните настройки; повтор с -BootstrapManager нужен только для незавершённой установки.' -Interactive
     }

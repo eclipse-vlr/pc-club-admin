@@ -5,7 +5,9 @@ $fixture = Join-Path ([IO.Path]::GetTempPath()) ('pcclub container test ' + [gui
 $launcher = Join-Path $fixture 'scripts/start-container.ps1'
 $file = Join-Path $fixture 'deploy/.env.staging'
 $image = 'ghcr.io/eclipse-vlr/pc-club-admin@sha256:' + ('a' * 64)
-$global:PCClubContainerFixture = @{ Mode = ''; Calls = @(); ExpectedHost = '' }
+$previousExit = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+$previousExitValue = if ($null -ne $previousExit) { $previousExit.Value } else { 0 }
+$global:PCClubContainerFixture = @{ Mode = ''; Calls = @(); ExpectedHost = ''; HasUsers = $false }
 function Assert-Container { param([bool]$Condition, [string]$Message); if (-not $Condition) { throw $Message } }
 function Invoke-Rejected {
     param([scriptblock]$Work)
@@ -53,7 +55,12 @@ function docker {
         };volumes=@{staging_postgres_data=@{name='pc-club-staging_staging_postgres_data'}} } | ConvertTo-Json -Depth 8 -Compress
     }
     if ($state.Mode -eq 'migration' -and $command.EndsWith(' migrate')) { $global:LASTEXITCODE=1; return 'synthetic-provider-secret' }
+    if ($command.Contains('SELECT EXISTS')) {
+        if ($state.Mode -eq 'database-status') { return 'unexpected' }
+        if ($state.HasUsers) { return 't' } else { return 'f' }
+    }
     if ($state.Mode -eq 'bootstrap' -and $command.Contains('bootstrap-manager')) { $global:LASTEXITCODE=1; return }
+    if ($command.Contains('bootstrap-manager')) { $state.HasUsers=$true }
     return 'done'
 }
 function Invoke-RestMethod {
@@ -126,12 +133,17 @@ try {
         Assert-Container ([IO.File]::ReadAllText($file) -eq $bad) 'Rejected settings were rewritten.'
     }
     [IO.File]::WriteAllBytes($file,$original)
-    foreach ($mode in @('unsafe-compose','migration','bootstrap')) {
+    foreach ($mode in @('unsafe-compose','migration','database-status','bootstrap')) {
         $global:PCClubContainerFixture.Mode=$mode;$global:PCClubContainerFixture.Calls=@()
+        if ($mode -eq 'bootstrap') { $global:PCClubContainerFixture.HasUsers=$false }
         Invoke-Rejected { & $launcher -BootstrapManager -NoBrowser }
         Assert-Container (-not ($global:PCClubContainerFixture.Calls -match 'up -d .* api$')) 'Failure started API.'
         Assert-Container ([IO.File]::ReadAllText($file) -eq $text) 'Failure replaced original settings.'
     }
+    $global:PCClubContainerFixture.Mode='';$global:PCClubContainerFixture.Calls=@()
+    & $launcher -NoBrowser | Out-Null
+    Assert-Container (@($global:PCClubContainerFixture.Calls -match 'bootstrap-manager').Count -eq 1 -and $global:PCClubContainerFixture.HasUsers) 'Incomplete setup was not resumed from authoritative database state.'
+    Assert-Container ([IO.File]::ReadAllText($file) -eq $text) 'Resumed setup replaced original settings.'
     $held=[IO.File]::Open((Join-Path $fixture 'deploy/.container-start.lock'),[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
     try { Invoke-Rejected { & $launcher -NoBrowser } } finally { $held.Dispose() }
     Assert-Container ($env:DOCKER_HOST -eq 'tcp://example.invalid:2376' -and $env:DOCKER_CONTEXT -eq 'remote' -and $env:DOCKER_TLS_VERIFY -eq '1' -and $env:STAGING_IMAGE -eq 'untrusted:latest') 'Caller environment was not restored.'
@@ -140,6 +152,7 @@ try {
     Assert-Container ([IO.File]::ReadAllText((Join-Path $fixture '.demo.local.json')) -eq 'synthetic-existing-drive-settings') 'Drive settings changed.'
     Write-Host 'Container launcher checks passed: first setup/restart, private secrets, preserved settings, local engine, pinned image, unsafe config and failure refusals.'
 } finally {
+    $global:LASTEXITCODE = $previousExitValue
     foreach ($key in $saved.Keys) { [Environment]::SetEnvironmentVariable($key,$saved[$key],'Process') }
     Remove-Variable PCClubContainerFixture -Scope Global
     Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
