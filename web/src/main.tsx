@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { FormEvent } from 'react';
 import { api, APIError } from './api';
@@ -10,7 +10,7 @@ import { ExportPanel } from './ExportPanel';
 import { EmployeePanel } from './EmployeePanel';
 import { AuditPanel } from './AuditPanel';
 import { ManagerDashboard } from './ManagerDashboard';
-import { confirmChecklistDiscard, hasUnsavedChecklist } from './checklist-drafts';
+import { confirmDraftDiscard, hasUnsavedDrafts } from './checklist-drafts';
 import { ThemeToggle } from './ThemeToggle';
 
 function App() {
@@ -21,6 +21,8 @@ function App() {
   const [excelSyncEnabled,setExcelSyncEnabled]=useState(false);
  const [clubTimezone,setClubTimezone]=useState('UTC');
   const [busy, setBusy] = useState(false);
+  // Block repeated submits before React renders the disabled controls.
+  const inFlight = useRef(false);
   const [message, setMessage] = useState('');
   const [messageKind, setMessageKind] = useState<'error' | 'success'>('error');
   const [mode, setMode] = useState<'admin' | 'manager'>('admin');
@@ -31,7 +33,7 @@ function App() {
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (!hasUnsavedChecklist()) return;
+      if (!hasUnsavedDrafts()) return;
       event.preventDefault(); event.returnValue = '';
     };
     window.addEventListener('beforeunload', warn);
@@ -77,16 +79,20 @@ function App() {
   }, [identity]);
 
   async function perform(work: () => Promise<void>) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true); setMessage(''); setMessageKind('success');
     try { await work(); await refresh(); }
     catch (error) {
       setMessageKind('error');
       setMessage(error instanceof APIError ? error.message : 'Не удалось связаться с сервером. Действие могло сохраниться — обновите страницу перед повтором.');
       if (error instanceof APIError && ['AUTH_REQUIRED', 'SESSION_CHANGED', 'DEVICE_REQUIRED'].includes(error.code)) setIdentity(null);
-    } finally { setBusy(false); }
+    } finally { inFlight.current = false; setBusy(false); }
   }
   function submit(event: FormEvent<HTMLFormElement>, work: (data: FormData) => Promise<void>) {
-    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+    event.preventDefault();
+    if (inFlight.current) return;
+    const form = event.currentTarget; const data = new FormData(form);
     // Keep names and selections on failure; clear submitted secrets immediately.
     form.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
     void perform(async () => { await work(data); form.reset(); });
@@ -104,7 +110,7 @@ function App() {
     {loading ? <p role="status">Проверяем сессию…</p> : identity ? <>
       <section className="identity-card"><h2>Личный вход подтверждён</h2><p>Роли: {identity.user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')}.</p>
         <p>{identity.device_trusted ? 'Браузер зарегистрирован в клубе.' : 'Удалённый вход. Доверие клубному браузеру не назначено.'}</p>
-        <button disabled={busy} onClick={() => { if (!confirmChecklistDiscard()) return; void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); }); }}>Выйти / сменить сотрудника</button>
+        <button disabled={busy} onClick={() => { if (!confirmDraftDiscard()) return; void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); }); }}>Выйти / сменить сотрудника</button>
       </section>
       <nav className="workspace-nav" aria-label="Разделы приложения"><a href="#current-shift">Текущая смена</a><a href="#shift-history">История</a>{identity.user.roles.includes('manager') && <><a href="#club-overview">Обзор клуба</a><a href="#reports">Отчёты и аудит</a><a href="#team">Сотрудники и доступ</a></>}</nav>
       <div id="current-shift"><ChecklistPanel key={identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} excelSyncEnabled={excelSyncEnabled} onSessionEnd={refresh} /></div>

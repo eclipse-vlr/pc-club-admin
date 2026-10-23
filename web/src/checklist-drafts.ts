@@ -3,6 +3,18 @@ export function hasUnsavedChecklist(): boolean {
   return document.querySelector('form[data-checklist-dirty="true"]') !== null;
 }
 
-export function confirmChecklistDiscard(): boolean {
-  return !hasUnsavedChecklist() || window.confirm('Есть несохранённые ответы или замечания чек-листа. Они будут потеряны. Продолжить?');
+export function hasUnsavedCash(except?: HTMLFormElement): boolean {
+  return Array.from(document.querySelectorAll<HTMLFormElement>('form[data-cash-dirty="true"]')).some(form => form !== except);
+}
+
+export function hasUnsavedDrafts(): boolean {
+  return hasUnsavedChecklist() || hasUnsavedCash();
+}
+
+export function confirmDraftDiscard(): boolean {
+  return !hasUnsavedDrafts() || window.confirm('Есть несохранённые ответы, замечания или данные кассы. Они будут потеряны. Продолжить?');
+}
+
+export function confirmCashDiscard(except?: HTMLFormElement): boolean {
+  return !hasUnsavedCash(except) || window.confirm('Есть несохранённые данные другой кассовой формы. Обновление смены удалит их. Продолжить?');
 }

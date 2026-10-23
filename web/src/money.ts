@@ -1,12 +1,16 @@
 const MIN = -(1n << 63n);
 const MAX = (1n << 63n) - 1n;
+export class MoneyInputError extends Error {
+  field: string;
+  constructor(message: string, field = '') { super(message); this.name = 'MoneyInputError'; this.field = field; }
+}
 export function parseRubles(raw: string): bigint {
   const text = raw.trim().replace(',', '.');
-  if (!/^-?\d+(?:\.\d{1,2})?$/.test(text)) throw new Error('Введите рубли точно, максимум два знака после запятой. Пустое поле не равно нулю.');
+  if (!/^-?\d+(?:\.\d{1,2})?$/.test(text)) throw new MoneyInputError('Введите рубли точно, максимум два знака после запятой. Пустое поле не равно нулю.');
   const negative = text.startsWith('-');
   const [whole, fraction = ''] = (negative ? text.slice(1) : text).split('.');
   const amount = (BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'))) * (negative ? -1n : 1n);
-  if (amount < MIN || amount > MAX) throw new Error('Сумма выходит за границы int64');
+  if (amount < MIN || amount > MAX) throw new MoneyInputError('Сумма слишком велика. Проверьте введённое значение.');
   return amount;
 }
 export function formatRubles(raw: string | null): string {
