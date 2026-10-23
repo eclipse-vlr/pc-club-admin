@@ -8,6 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Keep private documentation out of source
+        shell: bash
         run: |
           node --test scripts/test-public-docs.mjs
           node scripts/check-public-docs.mjs
