@@ -1,0 +1,39 @@
+name: Publish release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft release tag (vX.Y.Z-rc.N)
+        required: true
+        type: string
+      ci_run_id:
+        description: Successful main push CI run providing the Windows artifact
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.repository == 'eclipse-vlr/pc-club-admin'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify CI package, upload assets and publish the prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        run: python3 scripts/publish-release-candidate.py --tag "$RELEASE_TAG" --run-id "$CI_RUN_ID"
