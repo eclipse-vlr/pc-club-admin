@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { api, APIError } from './api';
 import type { User } from './api';
@@ -9,8 +9,14 @@ export function EmployeePanel({users,actor,refresh}:{users:User[];actor:string;r
  const [message,setMessage]=useState('');
  const [uncertain,setUncertain]=useState(false);
  const [generation,setGeneration]=useState(0);
+ const inFlight=useRef(false);
+ // A failed write or reload must be reconciled before another write starts.
+ const needsRead=useRef(false);
  async function save(event:FormEvent<HTMLFormElement>,user:User,pin=false){
-  event.preventDefault();const form=event.currentTarget;const data=new FormData(form);
+  event.preventDefault();
+  if(inFlight.current||needsRead.current)return;
+  inFlight.current=true;
+  const form=event.currentTarget;const data=new FormData(form);
   // Never retain a PIN in a form after submission, including a failed request.
   if(pin)form.reset();
   setBusy(true);setError('');setMessage('');
@@ -20,10 +26,17 @@ export function EmployeePanel({users,actor,refresh}:{users:User[];actor:string;r
    await refresh();setMessage(pin?'PIN изменён. Прежние сессии сотрудника завершены.':'Данные сотрудника сохранены.');
   }catch(cause){
    setError(cause instanceof APIError?cause.message:'Связь прервалась. Перечитайте сотрудников перед повтором.');
+   needsRead.current=true;
    setUncertain(true);
-  }finally{setBusy(false);}
+  }finally{inFlight.current=false;setBusy(false);}
  }
- async function reload(){setBusy(true);setError('');setMessage('');try{await refresh();setUncertain(false);setGeneration(value=>value+1);}catch{setError('Не удалось перечитать сотрудников. Повторите загрузку.');}finally{setBusy(false);}}
+ async function reload(){
+  if(inFlight.current)return;
+  inFlight.current=true;setBusy(true);setError('');setMessage('');
+  try{await refresh();needsRead.current=false;setUncertain(false);setGeneration(value=>value+1);}
+  catch{needsRead.current=true;setUncertain(true);setError('Не удалось перечитать сотрудников. Повторите загрузку.');}
+  finally{inFlight.current=false;setBusy(false);}
+ }
  return <section aria-label="Управление сотрудниками"><h3>Изменение сотрудников</h3>
   <p>Отключение завершает сессии. Нельзя отключить последнего управляющего или сотрудника с незавершённой сменой. Сброс PIN завершает прежние сессии, но не передаёт ответственность за смену.</p>
   {error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}

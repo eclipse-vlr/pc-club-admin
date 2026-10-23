@@ -6,7 +6,7 @@ export function blockerTarget(blocker: Blocker): string | null {
   if (blocker.code === 'NOTE_REQUIRED' || blocker.code === 'UNSAVED_NOTE') return 'shift-notes';
   if (blocker.item_code) return 'checklist-' + blocker.item_code;
   if (blocker.code === 'CHECKLIST_INCOMPLETE') return 'shift-acceptance';
-  if (blocker.code.startsWith('CASH_') || blocker.code === 'OPENING_COUNT_REQUIRED') return 'shift-cash';
+  if (blocker.code.startsWith('CASH_') || blocker.code === 'OPENING_COUNT_REQUIRED' || blocker.code === 'UNSAVED_CASH') return 'shift-cash';
   if (blocker.code === 'RECEIPT_REQUIRED' || blocker.code === 'RECEIPT_MISMATCH') return 'handover-receipt';
   if (blocker.code === 'NOTE_ACK_REQUIRED') return 'handover-notes';
   if (blocker.code === 'READINESS_UNKNOWN' || blocker.code === 'STORAGE_UNKNOWN') return 'shift-reload';

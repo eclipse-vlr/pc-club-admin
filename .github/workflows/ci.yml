@@ -8,9 +8,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Keep private documentation out of source
-        shell: pwsh
+        shell: bash
         run: |
-          if (git ls-files -- docs) { throw 'Private documentation must stay outside the source repository.' }
+          node --test scripts/test-public-docs.mjs
+          node scripts/check-public-docs.mjs
       - name: Windows PowerShell 5.1 launcher checks (no application)
         shell: powershell
         run: |
@@ -45,7 +46,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Keep private documentation out of source
-        run: test -z "$(git ls-files -- docs)"
+        run: |
+          node --test scripts/test-public-docs.mjs
+          node scripts/check-public-docs.mjs
       - name: Check container launcher with the actual Compose parser
         shell: pwsh
         run: ./scripts/test-container-compose.ps1
@@ -83,7 +86,7 @@ jobs:
         working-directory: web
       - run: npm run build
         working-directory: web
-      - name: Excel status UI with intercepted API (no Google requests)
+      - name: Browser UI with intercepted API (no external requests)
         env:
           PC_CLUB_CHROMIUM: /usr/bin/google-chrome
         run: |
@@ -92,6 +95,8 @@ jobs:
           node web/e2e/handover-recovery.mjs
           node web/e2e/theme.mjs
           node web/e2e/workflow-ui.mjs
+          node web/e2e/access-recovery.mjs
+          node web/e2e/cash-input-recovery.mjs
       - name: Build deployment image and validate isolated runtime
         run: |
           node scripts/test-staging-config.mjs
