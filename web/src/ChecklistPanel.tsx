@@ -7,7 +7,7 @@ import { CashPanel } from './CashPanel';
 import type { CashView } from './CashPanel';
 import { HandoverPanel } from './HandoverPanel';
 import { ExcelSyncPanel } from './ExcelSyncPanel';
-import { confirmChecklistDiscard } from './checklist-drafts';
+import { confirmDraftDiscard } from './checklist-drafts';
 import { BlockerList, blockerTarget } from './BlockerList';
 import type { Blocker } from './BlockerList';
 
@@ -30,6 +30,7 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
   const lastProgress = useRef<{ id: string; value: Readiness } | null>(null);
   const dirty = useRef(new Set<string>());
   const [dirtyCount, setDirtyCount] = useState(0);
+  const [cashDirty, setCashDirty] = useState(false);
   const loadRequest = useRef(0);
   function markDirty(code: string, changed: boolean) {
     if (changed) dirty.current.add(code); else dirty.current.delete(code);
@@ -153,13 +154,13 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
     : { code: 'UNSAVED_ANSWER', item_code: code, message: 'Сохраните ответ: ' + (shift?.checklist.find(item => item.code === code)?.label ?? code) });
   if (storageUncertain) localBlockers.unshift({ code: 'STORAGE_UNKNOWN', message: storageUncertain === 'refresh-required' ? 'Запись сохранена. Перечитайте актуальные данные смены перед новой операцией.' : 'Результат сохранения неизвестен. Перечитайте данные перед новой операцией.' });
   if (storageBusy) localBlockers.unshift({ code: 'STORAGE_SAVING', message: 'Дождитесь сохранения в приложении.' });
-  const actionBlockers: Blocker[] = [...localBlockers, ...(ready?.blockers ?? [{ code: 'READINESS_UNKNOWN', message: 'Готовность смены не получена. Перечитайте сохранённые данные.' }])];
+  const actionBlockers: Blocker[] = [...localBlockers, ...(cashDirty ? [{ code: 'UNSAVED_CASH', message: 'Сохраните несохранённые данные кассы.' }] : []), ...(ready?.blockers ?? [{ code: 'READINESS_UNKNOWN', message: 'Готовность смены не получена. Перечитайте сохранённые данные.' }])];
   const draftsPending = dirtyCount > 0 || storageBusy || !!storageUncertain;
   const progress = ready ?? (lastProgress.current?.id === shift?.id ? lastProgress.current?.value : null);
   return <section aria-label="Текущая смена">
     <h2>Смена и чек-лист</h2>
     <p>Черновик не назначает ответственного. В тестовом режиме первый приём требует чек-листа, собственного пересчёта и свежего PIN. Для передачи оба сотрудника лично входят по PIN на одном браузере.</p>
-    <button id="shift-reload" disabled={busy} onClick={() => { if (confirmChecklistDiscard()) void load().catch(() => {}); }}>Перечитать сохранённые данные</button>
+    <button id="shift-reload" disabled={busy} onClick={() => { if (confirmDraftDiscard()) void load().catch(() => {}); }}>Перечитать сохранённые данные</button>
     {dirtyCount > 0 && <p className="unsaved-notice" role="status">Есть несохранённые ответы или замечание. Сохраните их перед приёмом, передачей или кассовыми действиями. Прогресс учитывает только сохранённые данные.</p>}
     {error && <p role="alert" className="error">{error}</p>}
     {!loaded ? <p>{error ? 'Данные смены пока не получены. Повторите загрузку.' : 'Загружаем черновик…'}</p> : !shift ? <>
@@ -187,8 +188,8 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
         <div className="checklist-grid">{shift.checklist.filter(entry => entry.phase === phase).map(entry => <EntryEditor complete={completedVersions.current.get(shift.id + ':' + entry.code) === entry.version} key={generation + ':' + entry.code} entry={entry} disabled={busy || !!storageUncertain || !editable || (phase === 'acceptance' ? shift.status !== 'opening' : shift.status !== 'active')} onDirty={changed => markDirty(entry.code, changed)} onSave={(data, version) => saveEntry(entry, data, version)} />)}</div>
       </details>)}
       <fieldset className="shift-actions"><legend>Приём, касса и передача</legend>
-      {!(shift.status==='opening'&&shift.handover_parent_id)&&<CashPanel key={"cash:" + generation + ":" + shift.id + ":" + shift.version} identity={identity} shift={shift} draftsPending={draftsPending} activationBlockers={[...localBlockers, ...(ready?.acceptance.blockers ?? [{ code: 'READINESS_UNKNOWN', message: 'Готовность приёма не получена. Перечитайте сохранённые данные.' }])]} onNavigate={navigateBlocker} readyToActivate={ready?.can_activate === true && !busy} refresh={load} />}
-      <HandoverPanel key={"handover:"+generation+":"+shift.id+":"+shift.version} identity={identity} shift={shift} users={users} draftsPending={draftsPending} readinessKnown={!!ready} readinessBlockers={actionBlockers} acceptanceBlockers={ready?.acceptance.blockers ?? []} onNavigate={navigateBlocker} canPrepare={ready?.can_prepare_handover===true && !busy} checklistReady={!!ready && ready.acceptance.total > 0 && ready.acceptance.blockers.length === 0 && ready.acceptance.completed === ready.acceptance.total} refresh={load} onSessionEnd={onSessionEnd}/>
+      {!(shift.status==='opening'&&shift.handover_parent_id)&&<CashPanel key={"cash:" + generation + ":" + shift.id} identity={identity} shift={shift} onDirty={setCashDirty} draftsPending={draftsPending || busy} activationBlockers={[...localBlockers, ...(ready?.acceptance.blockers ?? [{ code: 'READINESS_UNKNOWN', message: 'Готовность приёма не получена. Перечитайте сохранённые данные.' }])]} onNavigate={navigateBlocker} readyToActivate={ready?.can_activate === true && !busy} refresh={load} />}
+      <HandoverPanel key={"handover:"+generation+":"+shift.id+":"+shift.version} identity={identity} shift={shift} users={users} draftsPending={draftsPending || cashDirty} readinessKnown={!!ready} readinessBlockers={actionBlockers} acceptanceBlockers={ready?.acceptance.blockers ?? []} onNavigate={navigateBlocker} canPrepare={ready?.can_prepare_handover===true && !busy} checklistReady={!!ready && ready.acceptance.total > 0 && ready.acceptance.blockers.length === 0 && ready.acceptance.completed === ready.acceptance.total} refresh={load} onSessionEnd={onSessionEnd}/>
       </fieldset>
       <div id="shift-notes" tabIndex={-1}><h3>Замечания</h3>
       {shift.notes.length ? <ul>{shift.notes.map(note => <li key={note.id}><strong>{note.category === 'equipment' ? 'Неисправность' : note.category === 'conflict' ? 'Конфликт' : 'Заметка'}</strong> {note.object_label}: {note.text}</li>)}</ul> : <p>Замечаний пока нет. Это не означает, что оборудование уже проверено.</p>}

@@ -6,7 +6,7 @@ import { actionFeedback } from './action-feedback';
 import type { ActionFeedback } from './action-feedback';
 import { ActionRequirements } from './BlockerList';
 import type { Blocker } from './BlockerList';
-import { formatRubles, parseRubles, stringifyExact } from './money';
+import { formatRubles, MoneyInputError, parseRubles, stringifyExact } from './money';
 
 type Shift = { id: string; owner_id: string; version: number; status: string; handover_id: string; handover_parent_id: string };
 type Handover = {
@@ -25,6 +25,8 @@ export function HandoverPanel({ identity, shift, users, canPrepare, checklistRea
   const [feedback, setFeedback] = useState<ActionFeedback | null>(null);
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
+  const [inputInvalid, setInputInvalid] = useState(false);
+  const receipt = useRef<HTMLInputElement>(null);
   // Refs also guard two submits in one browser event, before React renders disabled.
   const inFlight = useRef(false);
   const needsRead = useRef(false);
@@ -45,7 +47,10 @@ export function HandoverPanel({ identity, shift, users, canPrepare, checklistRea
     return () => { live = false; };
   }, [shift.handover_id]);
 
-  useEffect(() => { if (feedback) alert.current?.focus(); }, [feedback]);
+  useEffect(() => {
+    if (inputInvalid) receipt.current?.focus();
+    else if (feedback) alert.current?.focus();
+  }, [feedback, inputInvalid]);
 
   async function send(route: string, method: string, body: unknown) {
     const canonical = stringifyExact(body);
@@ -64,9 +69,14 @@ export function HandoverPanel({ identity, shift, users, canPrepare, checklistRea
     const form = event.currentTarget;
     const data = new FormData(form);
     form.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
-    setBusy(true); setFeedback(null);
+    setBusy(true); setFeedback(null); setInputInvalid(false);
     try { await work(data); }
     catch (cause) {
+      if (cause instanceof MoneyInputError && !saved.current) {
+        setInputInvalid(true);
+        setFeedback({ message: cause.message, instruction: 'Исправьте сумму и сохраните пересчёт. Данные на сервер не отправлялись.' });
+        return;
+      }
       needsRead.current = true; setUncertain(true);
       setFeedback(actionFeedback(cause, saved.current));
     } finally { inFlight.current = false; setBusy(false); }
@@ -104,7 +114,7 @@ export function HandoverPanel({ identity, shift, users, canPrepare, checklistRea
   return <section id="shift-handover" tabIndex={-1} aria-label="Передача смены" aria-busy={busy}>
     <h3>Передача смены · Тестовый режим</h3>
     <p>До окончательного приёма ответственным остаётся сдающий. Каждый сотрудник входит лично на этом же зарегистрированном браузере.</p>
-    {feedback && <div role="alert" tabIndex={-1} ref={alert}><p>{feedback.message}</p><p>{feedback.instruction}</p></div>}
+    {feedback && <div id="handover-feedback" role="alert" tabIndex={-1} ref={alert}><p>{feedback.message}</p><p>{feedback.instruction}</p></div>}
     {busy && <p role="status">Проверяем или отправляем данные. Дождитесь результата; повторно нажимать не нужно.</p>}
     <button id="handover-reconcile" type="button" disabled={busy} onClick={() => void reconcile()}>Проверить сессию и перечитать передачу</button>
     {own && shift.status === 'active' && <form onSubmit={event => void submit(event, async data => {
@@ -132,9 +142,9 @@ export function HandoverPanel({ identity, shift, users, canPrepare, checklistRea
         <p>Сумма станет вашим начальным остатком только после окончательного подтверждения.</p>
         <form onSubmit={event => void submit(event, async data => {
           const amount = parseRubles(text(data, 'counted'));
-          if (amount < 0n) throw new Error('Пересчёт не может быть отрицательным');
+          if (amount < 0n) throw new MoneyInputError('Пересчёт не может быть отрицательным');
           await send('/handovers/' + handover.id + '/receipt', 'PATCH', { revision: handover.revision, version: handover.version, counted_cash_kopecks: amount }); await refresh();
-        })}><fieldset id="handover-receipt" tabIndex={-1} disabled={disabled}><legend>Пересчёт принимающего</legend><label>Мой пересчёт наличных · рубли<input name="counted" inputMode="decimal" required /></label><button>Сохранить мой пересчёт</button></fieldset></form>
+        })}><fieldset id="handover-receipt" tabIndex={-1} disabled={disabled}><legend>Пересчёт принимающего</legend><label>Мой пересчёт наличных · рубли<input name="counted" inputMode="decimal" required ref={receipt} aria-invalid={inputInvalid || undefined} aria-describedby={inputInvalid ? 'handover-feedback' : undefined} onChange={() => { if (inputInvalid) { setInputInvalid(false); setFeedback(null); } }} /></label><button>Сохранить мой пересчёт</button></fieldset></form>
         {handover.snapshot.notes.length > 0 && <form onSubmit={event => void submit(event, async data => {
           await send('/handovers/' + handover.id + '/acknowledgements', 'POST', { revision: handover.revision, version: handover.version, note_ids: data.getAll('notes').map(String) }); await refresh();
         })}><fieldset id="handover-notes" tabIndex={-1} disabled={disabled}><legend>Ознакомление с замечаниями</legend>
