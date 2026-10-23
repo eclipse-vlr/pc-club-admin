@@ -8,9 +8,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Keep private documentation out of source
-        shell: pwsh
         run: |
-          if (git ls-files -- docs) { throw 'Private documentation must stay outside the source repository.' }
+          node --test scripts/test-public-docs.mjs
+          node scripts/check-public-docs.mjs
       - name: Windows PowerShell 5.1 launcher checks (no application)
         shell: powershell
         run: |
@@ -45,7 +45,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Keep private documentation out of source
-        run: test -z "$(git ls-files -- docs)"
+        run: |
+          node --test scripts/test-public-docs.mjs
+          node scripts/check-public-docs.mjs
       - name: Check container launcher with the actual Compose parser
         shell: pwsh
         run: ./scripts/test-container-compose.ps1
