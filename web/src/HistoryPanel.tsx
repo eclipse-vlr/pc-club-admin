@@ -72,7 +72,7 @@ export function HistoryPanel({identity,users,timezone}:{identity:Identity;users:
  return <details onToggle={event=>{if(event.currentTarget.open&&!page&&!busy&&!error)void load(query,cursor,previous);}}>
  <summary>История смен</summary><section><h2>История смен</h2>
  <p>{identity.user.roles.includes('manager')?'Доступны все смены клуба.':'Доступны ваши смены и закрытые смены, которые вы лично приняли. Снимки отозванных передач доступны через ваш отменённый черновик.'} Время: {timezone}. Данные доступны только для просмотра.</p>
- <form onSubmit={event=>void filter(event)}><fieldset disabled={busy}><legend>Фильтры истории</legend>
+ <form className="filter-form" onSubmit={event=>void filter(event)}><fieldset disabled={busy}><legend>Фильтры истории</legend>
  <label>Дата начала от<input name="date_from" type="date"/></label><label>Дата начала до<input name="date_to" type="date"/></label>
  <label>Сотрудник истории<select name="owner_id" defaultValue=""><option value="">Все доступные</option>{users.map(user=><option key={user.id} value={user.id}>{user.display_name}{user.active?'':' (неактивен)'}</option>)}</select></label>
  <label>Тип смены<select name="kind" defaultValue=""><option value="">Любой</option><option value="day">День 09–21</option><option value="night">Ночь 21–09</option></select></label>

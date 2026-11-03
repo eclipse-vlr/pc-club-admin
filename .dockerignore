@@ -16,6 +16,9 @@ reference
 **/*.log
 bin
 coverage*
+output
+assets/demo
+deploy/.portfolio-demo
 
 **/*_test.go
 web/e2e

@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import { api, APIError } from './api';
 import type { Identity, User } from './api';
 import './style.css';
+import './motion.css';
 import { ChecklistPanel } from './ChecklistPanel';
 import { HistoryPanel } from './HistoryPanel';
 import { ExportPanel } from './ExportPanel';
@@ -12,6 +13,9 @@ import { AuditPanel } from './AuditPanel';
 import { ManagerDashboard } from './ManagerDashboard';
 import { confirmDraftDiscard, hasUnsavedDrafts } from './checklist-drafts';
 import { ThemeToggle } from './ThemeToggle';
+import { InterfaceIcon } from './InterfaceIcon';
+import { MotionToggle } from './MotionToggle';
+import { useInterfaceMotion } from './use-interface-motion';
 
 function App() {
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -29,8 +33,14 @@ function App() {
   const [users, setUsers] = useState<User[]>([]);
  const [newRole,setNewRole]=useState('admin');
   const [enrollment, setEnrollment] = useState('');
+  const [activeSection, setActiveSection] = useState(() => window.location.hash || '#current-shift');
   const [devices, setDevices] = useState<{ id: string; label: string; expires_at: string; revoked: boolean }[]>([]);
 
+  useEffect(() => {
+    const updateSection = () => setActiveSection(window.location.hash || '#current-shift');
+    window.addEventListener('hashchange', updateSection);
+    return () => window.removeEventListener('hashchange', updateSection);
+  }, []);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (!hasUnsavedDrafts()) return;
@@ -99,20 +109,24 @@ function App() {
   }
   const text = (data: FormData, key: string) => String(data.get(key) ?? '');
   const actor = identity?.user.id ?? '';
+  useInterfaceMotion(activeSection, mode, actor, !loading);
+  const logout = () => { if (!confirmDraftDiscard()) return; void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); }); };
 
-  return <main>
+  return <main className={identity ? 'app app--authenticated' : 'app app--login'}>
     <a className="skip-link" href="#workspace">К рабочему экрану</a>
-    <header className="app-header"><a className="brand" href="#workspace"><span className="brand-mark" aria-hidden="true">PC</span><span>CLUB ADMIN<small>Управление сменами</small></span></a><div className="header-actions"><span className="mode-badge">{environment === 'test' ? 'Тестовый режим' : environment === 'production' ? 'Рабочие операции заблокированы' : 'Подключение…'}</span><ThemeToggle /></div></header>
-    <div className="page-heading" id="workspace" tabIndex={-1}><p className="eyebrow">{identity ? 'Рабочее пространство' : 'Компьютерный клуб'}</p>
-    <h1>{identity ? identity.user.display_name : 'Вход в приложение'}</h1><p className="page-description">{identity ? 'Смена, проверки и передача ответственности — в одном месте.' : 'Войдите в личную учётную запись, чтобы продолжить работу.'}</p></div>
-    <aside className="notice mode-notice"><strong>{environment === 'production' ? 'Рабочие операции заблокированы' : 'Демонстрационная версия'}</strong><p>Кассовая политика не подтверждена. Используйте только вымышленные тестовые данные.</p><details><summary>Правила работы в тестовом режиме</summary><p>Приём и передача требуют чек-листа, пересчёта кассы и личного PIN. Передача выполняется двумя сотрудниками на одном зарегистрированном браузере. Production заблокирован до проверки денежной политики.</p></details></aside>
+    <header className="app-header"><a className="brand" href="#workspace"><span className="brand-mark" aria-hidden="true">PC</span><span>CLUB ADMIN<small>Управление сменами</small></span></a><div className="header-actions"><span className="mode-badge">{environment === 'test' ? 'Тестовый режим' : environment === 'production' ? 'Рабочие операции заблокированы' : 'Подключение…'}</span><MotionToggle /><ThemeToggle /></div></header>
+    <div className="workspace-topline"><div className="page-heading" id="workspace" tabIndex={-1}><p className="eyebrow">{identity ? 'Управление сменами' : 'Компьютерный клуб'}</p>
+    <h1>{identity ? identity.user.display_name : 'Вход в приложение'}</h1><p className="page-description">{identity ? identity.user.roles.map(role => role === 'manager' ? 'Управляющий' : 'Администратор').join(' · ') : 'Войдите в личную учётную запись, чтобы продолжить работу.'}</p></div>
+    {identity && <div className="session-profile"><span className="profile-avatar" aria-hidden="true">{identity.user.display_name.trim().charAt(0)}</span><details className="session-details"><summary>Личный вход подтверждён</summary><p>{identity.device_trusted ? 'Браузер зарегистрирован в клубе.' : 'Удалённый вход. Доверие клубному браузеру не назначено.'}</p></details><button className="session-logout" disabled={busy} onClick={logout}>Выйти / сменить сотрудника</button></div>}</div>
+    <aside className="notice mode-notice"><strong>{environment === 'production' ? 'Рабочие операции заблокированы' : 'Демонстрация. Вымышленные данные'}</strong><p>Кассовая политика не подтверждена. Используйте только вымышленные тестовые данные.</p><details><summary>Правила работы в тестовом режиме</summary><p>Приём и передача требуют чек-листа, пересчёта кассы и личного PIN. Передача выполняется двумя сотрудниками на одном зарегистрированном браузере. Production заблокирован до проверки денежной политики.</p></details></aside>
     {message && <p className={messageKind} role={messageKind === 'error' ? 'alert' : 'status'}>{message}</p>}
     {loading ? <p role="status">Проверяем сессию…</p> : identity ? <>
-      <section className="identity-card"><h2>Личный вход подтверждён</h2><p>Роли: {identity.user.roles.map(role => role === 'manager' ? 'управляющий' : 'администратор').join(', ')}.</p>
-        <p>{identity.device_trusted ? 'Браузер зарегистрирован в клубе.' : 'Удалённый вход. Доверие клубному браузеру не назначено.'}</p>
-        <button disabled={busy} onClick={() => { if (!confirmDraftDiscard()) return; void perform(async () => { await api('/auth/logout', 'POST', {}, actor); setIdentity(null); setEnrollment(''); }); }}>Выйти / сменить сотрудника</button>
-      </section>
-      <nav className="workspace-nav" aria-label="Разделы приложения"><a href="#current-shift">Текущая смена</a><a href="#shift-history">История</a>{identity.user.roles.includes('manager') && <><a href="#club-overview">Обзор клуба</a><a href="#reports">Отчёты и аудит</a><a href="#team">Сотрудники и доступ</a></>}</nav>
+      <div className="workspace-shell">
+      <nav className="workspace-nav" aria-label="Разделы приложения"><span className="workspace-nav-label">Рабочий пульт</span>{[
+        ['#current-shift', 'Текущая смена'], ['#shift-history', 'История'],
+        ...(identity.user.roles.includes('manager') ? [['#club-overview', 'Обзор клуба'], ['#reports', 'Отчёты и аудит'], ['#team', 'Сотрудники и доступ']] : []),
+      ].map(([href, label]) => <a key={href} href={href} aria-current={activeSection === href ? 'location' : undefined}><InterfaceIcon name={href === '#current-shift' ? 'shift' : href === '#shift-history' ? 'history' : href === '#club-overview' ? 'overview' : href === '#reports' ? 'reports' : 'team'} />{label}</a>)}<div className="workspace-nav-note"><InterfaceIcon name="shield" /><span>Ответственность переходит<br />после личного приёма</span></div></nav>
+      <div className="workspace-content">
       <div id="current-shift"><ChecklistPanel key={identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} excelSyncEnabled={excelSyncEnabled} onSessionEnd={refresh} /></div>
       {identity.user.roles.includes('manager')&&<div id="club-overview"><ManagerDashboard key={'dashboard:'+identity.user.id}/></div>}
       <div id="shift-history"><HistoryPanel key={'history:'+identity.user.id} identity={identity} users={identity.user.roles.includes('manager')?users:options} timezone={clubTimezone}/></div>
@@ -137,7 +151,9 @@ function App() {
           {enrollment && <p>Введите этот код в клубном браузере. Он используется один раз: <code className="code">{enrollment}</code><button onClick={() => setEnrollment('')}>Скрыть код</button></p>}
         </section>
       </>}
-    </> : <section className="login-card">
+      </div></div>
+    </> : <div className="access-layout"><aside className="access-intro"><p className="eyebrow">Пульт компьютерного клуба</p><h2>Твой клуб.<br /><span>Твоя смена.</span></h2><p className="access-description">Один процесс для проверок, кассы и замечаний. Ответственность переходит, когда следующий администратор лично принимает смену.</p><div className="access-diagram" aria-label="Процесс передачи ответственности"><div className="diagram-caption"><InterfaceIcon name="shift" /><span>Как устроена передача</span></div><div className="diagram-transfer"><div><span className="diagram-person"><InterfaceIcon name="team" /></span><strong>Сдающий</strong><small>Ещё отвечает</small></div><div className="diagram-bridge"><span>Личный приём</span><InterfaceIcon name="arrow" /><small>Подтверждение PIN</small></div><div><span className="diagram-person diagram-person--next"><InterfaceIcon name="shield" /></span><strong>Принимающий</strong><small>Проверяет данные</small></div></div><div className="diagram-checks"><span>Чек-лист</span><span>Пересчёт кассы</span><span>Замечания</span></div></div><p className="access-footnote">Дневная смена <strong>09:00–21:00</strong><span aria-hidden="true"> / </span>Ночная смена <strong>21:00–09:00</strong></p></aside><section className="login-card" aria-busy={busy}>
+      <div className="login-card-heading"><span className="eyebrow">Личный доступ</span><h2>Начать работу</h2><p>Выберите способ входа.</p></div>
       <nav aria-label="Способ входа"><button disabled={busy} aria-pressed={mode === 'admin'} onClick={() => setMode('admin')}>Администратор · PIN</button><button disabled={busy} aria-pressed={mode === 'manager'} onClick={() => setMode('manager')}>Управляющий · пароль</button></nav>
       {mode === 'admin' ? options.length ? <form onSubmit={event => submit(event, async data => { await api('/auth/pin-login', 'POST', { user_id: text(data, 'user'), pin: text(data, 'pin') }); })}>
         <label>Сотрудник<select name="user" required defaultValue=""><option value="" disabled>Выберите своё имя</option>{options.map(user => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
@@ -148,7 +164,7 @@ function App() {
       <details><summary>Зарегистрировать браузер клуба</summary><form onSubmit={event => submit(event, async data => { await api('/devices/register', 'POST', { code: text(data, 'code'), label: text(data, 'label') }); setMessage('Браузер зарегистрирован. Войдите по личному PIN.'); })}>
         <label>Одноразовый код<input name="code" required minLength={64} maxLength={64} autoComplete="off" /></label><label>Название браузера<input name="label" required maxLength={100} /></label><button disabled={busy}>Зарегистрировать</button>
       </form><p>Это доверие браузеру, а не физическая привязка к компьютеру. После очистки cookie потребуется новый код.</p></details>
-    </section>}
+    </section></div>}
     <footer>Дневная смена 09:00–21:00 · Ночная 21:00–09:00. Ответственность передаётся только после персонального приёма.</footer>
   </main>;
 }
