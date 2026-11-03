@@ -65,6 +65,8 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: go mod download
+      - name: Portfolio demo isolation and repeatable setup guards
+        run: node --test scripts/test-portfolio-demo.mjs
       - run: go mod verify
       - name: Check Go vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
@@ -96,6 +98,7 @@ jobs:
           node web/e2e/checklist-drafts.mjs
           node web/e2e/handover-recovery.mjs
           node web/e2e/theme.mjs
+          node web/e2e/motion.mjs
           node web/e2e/workflow-ui.mjs
           node web/e2e/access-recovery.mjs
           node web/e2e/cash-input-recovery.mjs
@@ -109,6 +112,32 @@ jobs:
       - name: Container update backup and actual PostgreSQL restore
         shell: pwsh
         run: ./scripts/test-container-update.ps1
+      - name: Portfolio demo with real API, browser and persistent data
+        env:
+          PC_CLUB_CHROMIUM: /usr/bin/google-chrome
+        run: |
+          node scripts/portfolio-demo.mjs up
+          node web/e2e/portfolio-demo.mjs
+          node scripts/portfolio-demo.mjs stop
+          node scripts/portfolio-demo.mjs up
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { apiClient, demo } from './scripts/portfolio-demo.mjs';
+          const api = apiClient();
+          await api('/auth/manager-login', 'POST', { login: demo.login, password: demo.password });
+          assert.equal((await api('/users')).length, 3);
+          const dashboard = await api('/manager/dashboard');
+          assert.equal(dashboard.responsible.owner_name, demo.employees[1].name);
+          const events = await api('/audit-events?action=handover_accepted');
+          assert.equal(events.items.length, 1);
+          await api('/auth/logout', 'POST', {});
+          JS
+      - name: Clean up the explicitly selected portfolio demo
+        if: always()
+        run: |
+          if test -f deploy/.portfolio-demo/.env; then
+            node scripts/portfolio-demo.mjs reset --environment portfolio-demo
+          fi
       - name: Browser setup, handover, history and remote manager
         env:
           PC_CLUB_BROWSER_TEST: '1'
@@ -120,7 +149,7 @@ jobs:
           go run ./cmd/api &
           API_PID=$!
           trap 'kill "$API_PID"' EXIT
-          for i in {1..30}; do
+          for _ in {1..30}; do
             if curl --fail http://127.0.0.1:8080/readyz; then break; fi
             sleep 1
           done
