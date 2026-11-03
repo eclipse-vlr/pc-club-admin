@@ -9,6 +9,7 @@ import { HandoverPanel } from './HandoverPanel';
 import { ExcelSyncPanel } from './ExcelSyncPanel';
 import { confirmDraftDiscard } from './checklist-drafts';
 import { BlockerList, blockerTarget } from './BlockerList';
+import { ProgressMeter } from './ProgressMeter';
 import type { Blocker } from './BlockerList';
 
 type Entry = { code: string; phase: string; label: string; help_text: string; answer: string; comment: string; equipment_check: boolean; equipment_issue: boolean; answered_by: string | null; version: number };
@@ -158,9 +159,8 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
   const draftsPending = dirtyCount > 0 || storageBusy || !!storageUncertain;
   const progress = ready ?? (lastProgress.current?.id === shift?.id ? lastProgress.current?.value : null);
   return <section aria-label="Текущая смена">
-    <h2>Смена и чек-лист</h2>
-    <p>Черновик не назначает ответственного. В тестовом режиме первый приём требует чек-листа, собственного пересчёта и свежего PIN. Для передачи оба сотрудника лично входят по PIN на одном браузере.</p>
-    <button id="shift-reload" disabled={busy} onClick={() => { if (confirmDraftDiscard()) void load().catch(() => {}); }}>Перечитать сохранённые данные</button>
+    <div className="panel-heading shift-panel-heading"><div><p className="eyebrow">Рабочая смена</p><h2>Смена и чек-лист</h2></div><button id="shift-reload" disabled={busy} onClick={() => { if (confirmDraftDiscard()) void load().catch(() => {}); }}>Перечитать сохранённые данные</button></div>
+    <details className="shift-guide"><summary>Как принять и передать смену</summary><p>Черновик не назначает ответственного. В тестовом режиме первый приём требует чек-листа, собственного пересчёта и свежего PIN. Для передачи оба сотрудника лично входят по PIN на одном браузере.</p></details>
     {dirtyCount > 0 && <p className="unsaved-notice" role="status">Есть несохранённые ответы или замечание. Сохраните их перед приёмом, передачей или кассовыми действиями. Прогресс учитывает только сохранённые данные.</p>}
     {error && <p role="alert" className="error">{error}</p>}
     {!loaded ? <p>{error ? 'Данные смены пока не получены. Повторите загрузку.' : 'Загружаем черновик…'}</p> : !shift ? <>
@@ -179,7 +179,7 @@ export function ChecklistPanel({ identity, users,excelSyncEnabled,onSessionEnd }
       <div className="shift-overview"><div><strong>{shift.business_date}</strong><p>{shift.kind === 'night' ? 'Ночная 21:00–09:00' : 'Дневная 09:00–21:00'}</p><p>Ответственный: {users.find(user => user.id === shift.owner_id)?.display_name ?? (shift.owner_id === actor ? identity.user.display_name : 'Назначенный сотрудник')}</p></div><span className="shift-state">{shift.status === 'opening' ? 'Черновик приёма' : shift.status === 'active' ? 'Активная смена' : shift.status==='handover_pending'?'Ожидает приёма · ответственность сохраняется':'Изменения недоступны'}</span></div>
       <ExcelSyncPanel key={shift.id} shiftID={shift.id} version={shift.version} enabled={excelSyncEnabled} unsavedCount={dirtyCount} saving={storageBusy} saveUncertain={storageUncertain === 'unknown'} needsStorageRead={storageUncertain === 'refresh-required'} />
       {!editable && <p>Просмотр без права изменения. Ответы заполняет назначенный администратор после личного PIN-входа.</p>}
-      {progress && <div className="progress-grid" aria-label="Сохранённый прогресс чек-листов">{(['acceptance', 'closing'] as const).map(phase => <div className="progress-card" key={phase}><h3>{phase === 'acceptance' ? 'Приём смены' : 'Сдача смены'}<span>{progress[phase].completed} / {progress[phase].total}</span></h3><progress max={progress[phase].total || 1} value={progress[phase].completed} aria-label={phase === 'acceptance' ? 'Прогресс приёма' : 'Прогресс сдачи'} /><p>{!ready ? 'Обновляем проверку готовности…' : progress[phase].blockers.length ? `Причин, требующих внимания: ${progress[phase].blockers.length}` : 'Обязательные пункты заполнены'}</p></div>)}</div>}
+      {progress && <div className="progress-grid" aria-label="Сохранённый прогресс чек-листов">{(['acceptance', 'closing'] as const).map(phase => <div className="progress-card" key={phase}><h3>{phase === 'acceptance' ? 'Приём смены' : 'Сдача смены'}<span>{progress[phase].completed} / {progress[phase].total}</span></h3><ProgressMeter max={progress[phase].total} value={progress[phase].completed} label={phase === 'acceptance' ? 'Прогресс приёма' : 'Прогресс сдачи'} /><p>{!ready ? 'Обновляем проверку готовности…' : progress[phase].blockers.length ? `Причин, требующих внимания: ${progress[phase].blockers.length}` : 'Обязательные пункты заполнены'}</p></div>)}</div>}
       <nav className="shift-shortcuts" aria-label="Действия со сменой"><a href="#shift-acceptance" onClick={() => focusSection('shift-acceptance')}>Приём</a><a href="#shift-closing" onClick={() => focusSection('shift-closing')}>Сдача</a><a href="#shift-cash">Касса</a><a href="#shift-handover">Передача</a><a href="#shift-notes">Замечания</a></nav>
       <aside className="readiness-status">{ready ? ready.blockers.length ? <details><summary>Что осталось проверить: {ready.blockers.length}</summary><BlockerList blockers={ready.blockers} onNavigate={navigateBlocker} /></details> : <p>По сохранённым данным блокирующих причин нет. Для ответственного действия потребуется личное подтверждение.</p> : <p>Проверка готовности ещё не получена.</p>}</aside>
       {(['acceptance', 'closing'] as const).map(phase => <details className="checklist-phase" key={phase} id={'shift-' + phase} tabIndex={-1} open={phase === (shift.status === 'opening' ? 'acceptance' : 'closing')}>
@@ -211,21 +211,23 @@ function EntryEditor({ entry, disabled, complete, onSave, onDirty }: { entry: En
   const [draft, setDraft] = useState(entry);
   const [state, setState] = useState(entry.answered_by ? 'Сохранено' : 'Не заполнено');
   const [uncertain, setUncertain] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const changed = draft.answer !== baseline.answer || draft.comment !== baseline.comment || draft.equipment_issue !== baseline.equipment_issue;
   useEffect(() => {
     // Preserve drafts and their original optimistic-lock version across other saves.
     if (!changed && !uncertain) { setBaseline(entry); setDraft(entry); setState(entry.answered_by ? 'Сохранено' : 'Не заполнено'); }
   }, [entry, changed, uncertain]);
   function edit(next: Entry) {
+    setJustSaved(false);
     const different = next.answer !== baseline.answer || next.comment !== baseline.comment || next.equipment_issue !== baseline.equipment_issue;
     setDraft(next); onDirty(different); setState(different ? 'Не сохранено' : baseline.answered_by ? 'Сохранено' : 'Не заполнено');
   }
   async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const data = new FormData(event.currentTarget); setState('Сохраняется…');
-    try { const saved = await onSave(data, baseline.version); setBaseline(saved); setDraft(saved); onDirty(false); setState('Сохранено'); summary.current?.focus(); }
+    event.preventDefault(); const data = new FormData(event.currentTarget); setJustSaved(false); setState('Сохраняется…');
+    try { const saved = await onSave(data, baseline.version); setBaseline(saved); setDraft(saved); onDirty(false); setState('Сохранено'); setJustSaved(true); summary.current?.focus(); }
     catch { setState('Ошибка. Перечитайте данные перед повтором.'); setUncertain(true); }
   }
-  return <form id={'checklist-' + entry.code} tabIndex={-1} aria-label={entry.label} className="checklist-item" data-complete={complete && !uncertain && !changed} data-checklist-dirty={changed ? 'true' : undefined} onSubmit={event => void save(event)}>
+  return <form id={'checklist-' + entry.code} tabIndex={-1} aria-label={entry.label} className="checklist-item" data-just-saved={justSaved || undefined} data-complete={complete && !uncertain && !changed} data-checklist-dirty={changed ? 'true' : undefined} onSubmit={event => void save(event)}>
     <details open={!complete || changed || uncertain}>
     <summary ref={summary}><span>{entry.label}</span><span role="status">{state}</span></summary>
     <fieldset disabled={disabled || uncertain}>

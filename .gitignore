@@ -16,6 +16,8 @@
 *.service-account.json
 
 /deploy/.env
+/deploy/.portfolio-demo/
+/output/
 
 # Local demo target and credential path (never key contents).
 .demo.local.json
