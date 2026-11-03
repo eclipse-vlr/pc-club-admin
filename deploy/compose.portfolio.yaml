@@ -1,0 +1,6 @@
+# Only used by scripts/portfolio-demo.mjs with its own generated configuration.
+services:
+  api:
+    environment:
+      APP_ORIGIN: http://127.0.0.1:18081
+    ports: !override ['127.0.0.1:18081:8080']

@@ -64,7 +64,7 @@ export function AuditPanel({users,timezone}:{users:User[];timezone:string}) {
   <section aria-label="Журнал действий"><h2>Журнал действий</h2>
    <p>Доступен только управляющему. События показаны от новых к старым. Изменять записи нельзя.</p>
    <p>Время событий: {timezone}. Период вводится во времени браузера: {localZone}; начало включается, конец не включается.</p>
-   <form onSubmit={filter}><fieldset disabled={busy}><legend>Фильтры журнала</legend>
+   <form className="filter-form" onSubmit={filter}><fieldset disabled={busy}><legend>Фильтры журнала</legend>
     <label>Автор события<select name="actor_id" defaultValue=""><option value="">Все авторы, включая систему</option>{users.map(user=><option key={user.id} value={user.id}>{user.display_name}{user.active?'':' (неактивен)'}</option>)}</select></label>
     <label>Начало периода<input name="from" type="datetime-local" step="1"/></label>
     <label>Конец периода<input name="to" type="datetime-local" step="1"/></label>
