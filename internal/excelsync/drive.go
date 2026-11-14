@@ -36,7 +36,7 @@ type DriveClient struct {
 }
 
 // NewDriveClient uses only a configured service account and fixed Google hosts.
-// The ChatGPT Google connection is not an application's server credential.
+// Interactive account connections do not supply server credentials.
 func NewDriveClient(ctx context.Context, credentialsPath, fileID string) (*DriveClient, error) {
 	if !fileIDPattern.MatchString(fileID) {
 		return nil, fail("EXCEL_CONFIG_INVALID")
